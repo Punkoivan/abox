@@ -41,7 +41,15 @@ resource "kubectl_manifest" "rsip" {
       type: OCIArtifactTag
       url: ${var.oci_registry}/releases
       filter:
-        includeTag: "^\\d+\\.\\d+\\.\\d+$"
+        # Pinned to main's own last release. flux-push.yaml fires on any v*
+        # tag and, until it learned to separate branches, pushed every tag
+        # into this one artifact repository -- 0.6.6 through 0.8.9 in
+        # oci://.../releases were all cut from feat/llmd-embeddings, not from
+        # main. An open ^\d+\.\d+\.\d+$ with limit 1 therefore resolves to
+        # 0.8.9 and a cluster bootstrapped from main runs that branch's
+        # bundle. Widen this again once those tags are gone from the registry
+        # and main cuts its next release.
+        includeTag: "^0\\.6\\.5$"
         limit: 1
       defaultValues:
         tag: "${var.releases_version}"
