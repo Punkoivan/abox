@@ -39,7 +39,7 @@ resource "kubectl_manifest" "rsip" {
         fluxcd.controlplane.io/reconcileEvery: 5m
     spec:
       type: OCIArtifactTag
-      url: ${var.oci_registry}/releases
+      url: ${var.oci_registry}/${var.releases_artifact}
       filter:
         # Pinned to main's own last release. flux-push.yaml fires on any v*
         # tag and, until it learned to separate branches, pushed every tag
@@ -80,7 +80,7 @@ resource "kubectl_manifest" "rset" {
           namespace: flux-system
         spec:
           interval: 2m
-          url: ${var.oci_registry}/releases
+          url: ${var.oci_registry}/${var.releases_artifact}
           ref:
             tag: "<< inputs.tag >>"
       - apiVersion: kustomize.toolkit.fluxcd.io/v1
