@@ -24,7 +24,8 @@ type Raw struct {
 
 func text(s string) *mcp.CallToolResultFor[Raw] {
 	return &mcp.CallToolResultFor[Raw]{
-		Content: []mcp.Content{&mcp.TextContent{Text: s}},
+		Content:           []mcp.Content{&mcp.TextContent{Text: s}},
+		StructuredContent: Raw{Body: s},
 	}
 }
 
