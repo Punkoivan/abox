@@ -1,0 +1,89 @@
+# Official qdrant MCP server (github.com/qdrant/mcp-server-qdrant), as a
+# second toolset alongside the custom Go qdrant-mcp in mcp-servers.yaml --
+# see docs/adr/0004-official-qdrant-mcp.md for the full reasoning.
+#
+# No official prebuilt image exists on Docker Hub or GHCR (checked both).
+# Built from the project's own actual Dockerfile (git clone + docker build,
+# unmodified -- not a from-scratch pip-install wrapper, which was tried
+# first and is the wrong way to do this: check upstream's own packaging
+# before writing one). That Dockerfile already defaults EMBEDDING_MODEL to
+# sentence-transformers/all-MiniLM-L6-v2, which is what the comparison
+# exercise (steps 6-7 of the course task) asks for -- no override needed.
+# Source: harness-course/qdrant-mcp-official/repo (sibling learning repo,
+# gitignored -- reproducible via `git clone` + `docker build`).
+#
+# Deployed as a plain Deployment + Service, registered as a
+# RemoteMCPServer rather than kagent's own MCPServer CRD: the custom
+# qdrant-mcp is a stdio process kagent wraps and manages; this image runs
+# its own SSE HTTP server (CMD uvx mcp-server-qdrant --transport sse, port
+# 8000) -- already a remote server from kagent's point of view, same
+# pattern as kagent-tool-server / kagent-grafana-mcp in mcp-servers.yaml.
+#
+# Separate collection (k8s_manifests_mcp) from the custom server's
+# abox-nomic -- FastEmbed's all-MiniLM-L6-v2 and nomic-embed-text-v1.5 are
+# different, incompatible vector spaces and must never share a collection.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: official-qdrant-mcp
+  namespace: kagent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: official-qdrant-mcp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: official-qdrant-mcp
+    spec:
+      containers:
+        - name: mcp-server-qdrant
+          image: official-qdrant-mcp:0.8.1
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: FASTMCP_SERVER_HOST
+              value: "0.0.0.0"
+            - name: QDRANT_URL
+              value: "http://qdrant.qdrant:6333"
+            - name: COLLECTION_NAME
+              value: "k8s_manifests_mcp"
+            # EMBEDDING_MODEL left at the image's own default
+            # (sentence-transformers/all-MiniLM-L6-v2) -- that's the point.
+          ports:
+            - containerPort: 8000
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          readinessProbe:
+            tcpSocket:
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: official-qdrant-mcp
+  namespace: kagent
+spec:
+  selector:
+    app.kubernetes.io/name: official-qdrant-mcp
+  ports:
+    - port: 8000
+      targetPort: 8000
+---
+apiVersion: kagent.dev/v1alpha2
+kind: RemoteMCPServer
+metadata:
+  name: official-qdrant-mcp
+  namespace: kagent
+spec:
+  description: "Official qdrant MCP server (qdrant/mcp-server-qdrant) -- qdrant-store / qdrant-find tools, FastEmbed all-MiniLM-L6-v2 embeddings."
+  url: http://official-qdrant-mcp.kagent.svc.cluster.local:8000/sse
+  protocol: SSE

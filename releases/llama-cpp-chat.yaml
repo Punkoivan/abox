@@ -1,0 +1,91 @@
+# Chat-capable llama.cpp server for retrieval-agent / k8s-agent.
+#
+# Same shape as llama-cpp-embeddings.yaml (llama.cpp, GGUF baked into the
+# image, no external fetch) but not an embedder: --jinja for tool-call
+# templating, no --embedding, and --parallel 1 so the single conversation
+# gets the whole -c 8192 context instead of the default's 4-way split
+# (n_ctx_slot = c/n_parallel -- at the default n_parallel=4 that's 2048
+# tokens per slot, which this agent's ~2.4k-token system prompt alone
+# already exceeds; every request failed with "failed to find free space
+# in the KV cache" until this was set explicitly).
+#
+# Model: Qwen2.5-3B-Instruct, Q4_K_M (~2GB) -- sized down from an initial
+# 7B plan after `free -h` showed only ~6.7GB available on the host, the
+# rest legitimately held by normal desktop use. Tool-calling verified
+# working at 3B (see docs/adr/0003-chat-model-for-kagent-agents.md).
+#
+# Image is built locally (harness-course/chat-model/Dockerfile in the
+# sibling learning repo) and loaded straight into the KinD nodes with
+# `kind load docker-image` -- no registry. imagePullPolicy: IfNotPresent
+# means this only works as long as the image stays cached on these nodes;
+# rebuilding the cluster from scratch requires reloading it first.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llama-cpp-chat
+  namespace: llama-cpp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: llama-cpp-chat
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: llama-cpp-chat
+    spec:
+      containers:
+        - name: llama-server
+          image: velesha-chat-sidecar:qwen2.5-3b
+          imagePullPolicy: IfNotPresent
+          args: ["--parallel", "1"]
+          ports:
+            - containerPort: 8082
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+            limits:
+              cpu: "3"
+              memory: 3Gi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8082
+            initialDelaySeconds: 3
+            periodSeconds: 3
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8082
+            initialDelaySeconds: 15
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llama-cpp-chat
+  namespace: llama-cpp
+spec:
+  selector:
+    app.kubernetes.io/name: llama-cpp-chat
+  ports:
+    - port: 8082
+      targetPort: 8082
+---
+# llama-server doesn't check the API key, but ModelConfig requires
+# apiKeySecret regardless -- reusing kagent-openai (its 14-char placeholder
+# is never read).
+apiVersion: kagent.dev/v1alpha2
+kind: ModelConfig
+metadata:
+  name: local-chat-model
+  namespace: kagent
+spec:
+  provider: OpenAI
+  model: qwen2.5-3b-instruct
+  apiKeySecret: kagent-openai
+  apiKeySecretKey: OPENAI_API_KEY
+  openAI:
+    baseUrl: http://llama-cpp-chat.llama-cpp.svc.cluster.local:8082/v1

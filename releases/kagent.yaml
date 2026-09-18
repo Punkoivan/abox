@@ -46,6 +46,18 @@ spec:
             value: "0.10.1"
         target:
           labelSelector: app.kubernetes.io/name=kagent
+      # k8s-agent is chart-built-in (not declared elsewhere in releases/),
+      # so it inherits providers.default (openAI, chart placeholder key)
+      # unless patched. Point it at the in-cluster chat model instead --
+      # see releases/llama-cpp-chat.yaml and
+      # docs/adr/0003-chat-model-for-kagent-agents.md.
+      - patch: |
+          - op: replace
+            path: /spec/declarative/modelConfig
+            value: local-chat-model
+        target:
+          kind: Agent
+          name: k8s-agent
   dependsOn:
     - name: kagent-crds
       namespace: kagent

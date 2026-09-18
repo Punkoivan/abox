@@ -7,11 +7,11 @@ spec:
   type: Declarative
   description: Ingests and retrieves data across a vector store and a graph.
   declarative:
-    # The ModelConfig the kagent chart creates, which every other agent here
-    # uses. It was gemini-gemini-2-5-flash, but that object was never shipped
-    # in releases/ -- it was created by hand and did not survive the cluster
-    # being rebuilt, leaving the agent stuck on ReconcileFailed.
-    modelConfig: default-model-config
+    # default-model-config's apiKeySecret is the kagent Helm chart's own
+    # 14-char placeholder, never a real OpenAI key -- see
+    # releases/llama-cpp-chat.yaml and docs/adr/0003-chat-model-for-kagent-agents.md.
+    # local-chat-model points at that in-cluster llama.cpp server instead.
+    modelConfig: local-chat-model
     stream: true
     systemMessage: |
       You are a data agent over two stores in this cluster. Which products
@@ -98,6 +98,23 @@ spec:
 
       Answer from what you retrieved, and say which store each fact came from.
       Never run write-cypher while answering a retrieval question.
+
+      ## Second toolset (course exercise: agentic vs direct indexing)
+
+      A second, independent vector store is available for comparison:
+      qdrant-store / qdrant-find (the official qdrant/mcp-server-qdrant MCP
+      server, collection k8s_manifests_mcp, FastEmbed
+      sentence-transformers/all-MiniLM-L6-v2 embeddings -- a different model
+      and a different collection from the primary store above, not
+      interchangeable with it).
+
+      Default to the primary vector_store/vector_find, as described above.
+      Use qdrant-store/qdrant-find only when explicitly asked to use "the
+      official qdrant MCP" or "the second toolset". When asked to ingest via
+      it, call qdrant-store once per manifest with its raw YAML as
+      `information` and {name, namespace, kind} as `metadata` -- the same
+      content the primary store's vector_store ingestion uses, so the two
+      are comparable on identical source data.
     tools:
     - type: McpServer
       mcpServer:
@@ -125,3 +142,12 @@ spec:
         kind: Agent
         name: k8s-agent
         namespace: kagent
+    # Second toolset -- see docs/adr/0004-official-qdrant-mcp.md.
+    - type: McpServer
+      mcpServer:
+        apiGroup: kagent.dev
+        kind: RemoteMCPServer
+        name: official-qdrant-mcp
+        toolNames:
+        - qdrant-store
+        - qdrant-find

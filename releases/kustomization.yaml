@@ -6,9 +6,11 @@ resources:
   - agentregistry.yaml
   - agent-retrieval.yaml
   - kagent.yaml
+  - llama-cpp-chat.yaml
   - llama-cpp-embeddings.yaml
   - llmd.yaml
   - mcp-servers.yaml
   - neo4j.yaml
   - phoenix.yaml
   - qdrant.yaml
+  - qdrant-mcp-official.yaml
