@@ -55,8 +55,15 @@ jobs:
       - name: Push OCI artifact
         id: push
         run: |
+          # OCI/Docker references must be all-lowercase; github.repository
+          # preserves the owner's case as typed (e.g. "Punkoivan/abox"),
+          # which ghcr.io then rejects with "invalid URL: could not parse
+          # reference". Lowercase it explicitly rather than relying on the
+          # owner's GitHub username happening to already be lowercase.
+          REPO="$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+          echo "repo=${REPO}" >> $GITHUB_OUTPUT
           TAG=${GITHUB_REF_NAME#v}
-          digest=$(flux push artifact oci://ghcr.io/${{ github.repository }}/${{ steps.repo.outputs.name }}:${TAG} \
+          digest=$(flux push artifact oci://ghcr.io/${REPO}/${{ steps.repo.outputs.name }}:${TAG} \
             --path="./releases" \
             --source="${{ github.repositoryUrl }}" \
             --revision="${{ github.ref_name }}@sha1:${{ github.sha }}" \
@@ -67,5 +74,5 @@ jobs:
       - name: Tag artifact
         run: |
           flux tag artifact \
-            oci://ghcr.io/${{ github.repository }}/${{ steps.repo.outputs.name }}:${{ steps.push.outputs.tag }}@${{ steps.push.outputs.digest }} \
+            oci://ghcr.io/${{ steps.push.outputs.repo }}/${{ steps.repo.outputs.name }}:${{ steps.push.outputs.tag }}@${{ steps.push.outputs.digest }} \
             --tag latest
