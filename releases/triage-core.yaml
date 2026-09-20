@@ -40,6 +40,11 @@ spec:
     image:
       repository: ghcr.io/den-vasyliev/abox/triage-core
       tag: sai-753e7f0d
+    # The chart's own serviceAccount.create renders a dedicated SA, not the
+    # namespace default -- releases/triage.yaml's default-SA patch doesn't
+    # cover it. imagePullSecrets here goes straight onto the pod spec.
+    imagePullSecrets:
+      - name: triage-ghcr-pull
     # No Vertex AI / Workload Identity on KinD -- the same baked llama.cpp +
     # nomic-embed-text-v1.5 sidecar releases/xray-memory.yaml and
     # releases/llama-cpp-embeddings.yaml already run, at the chart's default

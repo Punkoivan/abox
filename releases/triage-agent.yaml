@@ -33,5 +33,9 @@ spec:
     image:
       repository: ghcr.io/den-vasyliev/abox/triage-agent
       tag: v3.0.0-5933996-obi
+    # Same reason as triage-core: the chart's own SA, not the namespace
+    # default, so imagePullSecrets goes on the values, not just the SA patch.
+    imagePullSecrets:
+      - name: triage-ghcr-pull
     # push (the WebSocket link to triage-core) stays off until its token
     # Secret is prepared -- see releases/triage-core.yaml's clusterAgents.
