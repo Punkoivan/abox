@@ -47,11 +47,15 @@ spec:
       secret:
         name: ngrok-operator-credentials
 ---
-# Custom domain for triage-core and agentgateway-external, replacing the
-# free ngrok-assigned quietly-just-ferret.ngrok-free.app (still live and
-# untouched -- triage-ui's HTTPRoute still targets it, and this Domain/
-# AgentEndpoint pair were auto-created by the operator itself, not by this
-# repo, so there is nothing here to remove).
+# Custom domain for triage-core, triage-ui and agentgateway-external,
+# replacing the free ngrok-assigned quietly-just-ferret.ngrok-free.app.
+# triage-ui's HTTPRoute (raw `helm install`, out-of-band, not in this repo --
+# `meta.helm.sh/release-name: triage-ui` with no Flux labels) was repointed
+# to this domain by patching it directly, same way it was created; its /ui
+# PathPrefix coexists with triage-core's own HTTPRoute (/mcp, / catch-all) on
+# this hostname since Gateway API picks the longer path match. The free
+# domain's Domain/AgentEndpoint pair is left alone -- auto-created by the
+# operator itself, not by this repo, so there is nothing here to remove.
 #
 # The operator auto-creates a Domain the same way for a Gateway's listener
 # the first time an AgentEndpoint's spec.url names a hostname with no

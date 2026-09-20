@@ -78,7 +78,7 @@ spec:
     # closed (chart default). GitHub SSO's clientSecret comes from the
     # triage-github-oauth Secret (GITHUB_CLIENT_SECRET key), already in-cluster.
     sso:
-      publicURL: https://quietly-just-ferret.ngrok-free.app
+      publicURL: https://triageagent.ngrok.dev
       github:
         clientId: Ov23li6QQzPWxk27mHpy
         secretRef:
