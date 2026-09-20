@@ -90,3 +90,18 @@ spec:
       eventSources:
         kubernetes:
           enabled: true
+      # Off by default (runtimeConfig.otelTracing.enabled: false in the
+      # chart) -- nothing exported triage-core's own LLM/guardrail/agent
+      # spans anywhere until this. grpc is the only protocol the exporter
+      # build supports; insecure: true because phoenix-svc has no TLS
+      # (ClusterIP+NodePort, in-cluster only). projectName splits triage's
+      # spans into their own Phoenix project instead of landing in the
+      # default one every untenanted deployment shares.
+      otelTracing:
+        enabled: true
+        endpoint: phoenix-svc.phoenix.svc.cluster.local:4317
+        protocol: grpc
+        insecure: true
+        serviceName: triage-core
+        projectName: triage-core
+        samplePercent: 100

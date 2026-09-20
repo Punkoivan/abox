@@ -15,17 +15,72 @@
 #   open http://localhost:15000/ui
 #
 # LLM traffic: http://agentgateway-llm.agentgateway-system.svc.cluster.local
-# (Service port 80 -> bind 8080, once a bind on 8080 is configured).
+# (Service port 80 -> gateways.default on 8080, OpenAI-compatible paths, e.g.
+# POST /v1/chat/completions with `Authorization: Bearer <TRIAGE_LLM_KEY>`).
+# `gateways: default: {port: 8080}` replaces the old `binds: []` stub --
+# `binds` is the deprecated raw-config field; the simplified `llm:` section
+# below attaches to the gateway named "default" implicitly, and omitting a
+# `gateways:` block entirely (as this file did before) leaves agentgateway's
+# own built-in default of port 4000, not this Service's 8080.
 #
 # config.database is what the Costs/Analytics/Logs pages in the UI need --
 # without it those pages have nothing to read and stay empty, which is why a
 # fresh install shows a short menu with whole LLM sections looking hidden.
 # SQLite on the same PVC the config file already lives on, so no second
-# volume. config.modelCatalog (dollar pricing on top of the token/call counts
-# the database already gives you) is deliberately left out here: agentgateway
-# has no built-in catalog, it has to come from `agctl catalog import` (pulls
-# from models.dev) or a hand-written file/inline entry, and with binds still
-# empty there are no providers/models yet for a catalog to price.
+# volume.
+#
+# Gemini 2.5 Flash text only -- Gemini's native-audio Live API is a stateful
+# WebSocket protocol agentgateway has no backend type for (it proxies exactly
+# one realtime WS protocol today, OpenAI Realtime; there is no Gemini-Live
+# equivalent), so voice bypasses this gateway entirely and goes straight from
+# LiveKit to Gemini. GEMINI_API_KEY is a container env var (Secret, out of
+# band, same convention as every other credential in this repo):
+#
+#   kubectl -n agentgateway-system create secret generic agentgateway-llm-secrets \
+#     --from-literal=GEMINI_API_KEY=<gemini api key> \
+#     --from-literal=TRIAGE_LLM_KEY=<random bearer token for the triage virtual key>
+#
+# llm.policies.apiKey.mode: strict means every LLM request needs
+# `Authorization: Bearer <TRIAGE_LLM_KEY>` -- that Bearer token IS the
+# "triage" tenant identity ag-llm's budget/allowedModels/metrics all key off,
+# so it is never written into this file in plaintext (unlike GEMINI_API_KEY,
+# it isn't a provider secret agentgateway calls out with -- it is the
+# credential callers present TO this gateway, so it has to be a real value a
+# caller can be given, not something agentgateway resolves itself; the only
+# way to keep it out of git is the same $ENV substitution agentgateway
+# already does for params.apiKey).
+#
+# config.modelCatalog prices gemini-2.5-flash (USD per 1M tokens, checked
+# against ai.google.dev/gemini-api/docs/pricing -- $0.30 in / $2.50 out /
+# $0.03 cached-read / $1.00 audio-in) so the USD budget below and the
+# Costs/Analytics pages have real numbers instead of token counts alone.
+# `gcp.gemini` is the catalog's provider id for the Gemini API, not a values
+# choice -- see agentgateway's own worked example under Model costs.
+#
+# frontendPolicies.tracing sends every request/response span (HTTP + LLM,
+# OpenTelemetry gen-ai semconv) to Phoenix's OTLP gRPC receiver in-cluster --
+# plaintext, no auth, matching how phoenix-svc is otherwise only reachable
+# from inside the cluster. This traces ag-llm's own proxy hop; it says
+# nothing about whether triage-core's own LLM calls reach Phoenix (they
+# don't yet -- see releases/triage-core.yaml's otelTracing block) or whether
+# triage-core's calls even route through this gateway at all (they don't:
+# the chart has no values.yaml knob to source runtimeConfig.model.apiKey
+# from a flag/Secret instead of the plaintext-readable MemoryCell document,
+# so pointing triage-core's baseURL here is blocked on a chart change
+# upstream, not something to route around by weakening apiKey.mode).
+#
+# llm.policies.guardrails is regex-only: built-in PII detectors (mask, so a
+# false positive degrades rather than breaks the request) plus the same
+# injection/jailbreak phrase list triage-core's own event guardrail already
+# checks (internal/core/guardrail.go's roleHijackPatterns et al, ported here
+# as a second, independent layer against LLM traffic specifically -- reject,
+# not mask, since there is no safe redaction of a whole hijack attempt).
+# Needs no external service/credentials beyond what is already here, unlike
+# openAIModeration/bedrockGuardrails/googleModelArmor.
+#
+# The triage-daily-spend budget ($5/day) is a starting guardrail, not a
+# measured number -- raise it in the UI (LLM > Virtual API Keys) or here if
+# it is too tight.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -37,7 +92,75 @@ data:
       adminAddr: 0.0.0.0:15000
       database:
         url: "sqlite:///config/agentgateway.db?mode=rwc"
-    binds: []
+      modelCatalog:
+      - inline:
+          providers:
+            gcp.gemini:
+              models:
+                gemini-2.5-flash:
+                  rates:
+                    input: "0.30"
+                    output: "2.50"
+                    cacheRead: "0.03"
+                    inputAudio: "1.00"
+
+    gateways:
+      default:
+        port: 8080
+
+    frontendPolicies:
+      tracing:
+        host: phoenix-svc.phoenix.svc.cluster.local:4317
+        randomSampling: true
+
+    llm:
+      policies:
+        apiKey:
+          mode: strict
+          keys:
+          - key: "$TRIAGE_LLM_KEY"
+            metadata:
+              name: triage
+            allowedModels:
+            - gemini-2.5-flash
+            budgets:
+            - name: triage-daily-spend
+              limit:
+                unit: USD
+                amount: 5
+              window:
+                rolling: 24h
+              onBudgetExceeded: Block
+        guardrails:
+          request:
+          - regex:
+              action: mask
+              rules:
+              - builtin: creditCard
+              - builtin: ssn
+              - builtin: email
+              - builtin: phoneNumber
+          - regex:
+              action: reject
+              rules:
+              - pattern: '(?i)ignore\s+(all\s+|any\s+)?previous\s+instructions'
+              - pattern: '(?i)ignore\s+(all\s+|any\s+)?prior\s+instructions'
+              - pattern: '(?i)disregard\s+(all\s+|any\s+)?previous\s+instructions'
+              - pattern: '(?i)forget\s+(all\s+|any\s+)?previous\s+instructions'
+              - pattern: '(?i)you\s+are\s+now\s+(a|an|my)\s+'
+              - pattern: '(?i)new\s+instructions\s*:'
+              - pattern: '(?i)system\s*:\s*you\s+are'
+              - pattern: '(?i)act\s+as\s+if\s+you'
+              - pattern: '(?i)DAN\s+mode'
+              - pattern: '(?i)developer\s+mode'
+              - pattern: '(?i)do\s+anything\s+now'
+              - pattern: '(?i)jailbreak'
+      models:
+      - name: gemini-2.5-flash
+        provider: gemini
+        params:
+          model: gemini-2.5-flash
+          apiKey: "$GEMINI_API_KEY"
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -86,6 +209,17 @@ spec:
           ports:
             - {name: llm, containerPort: 8080}
             - {name: admin, containerPort: 15000}
+          env:
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agentgateway-llm-secrets
+                  key: GEMINI_API_KEY
+            - name: TRIAGE_LLM_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agentgateway-llm-secrets
+                  key: TRIAGE_LLM_KEY
           volumeMounts:
             - {name: config, mountPath: /config}
       volumes:
