@@ -14,6 +14,7 @@ resources:
   - neo4j.yaml
   - ngrok-operator.yaml
   - opentelemetry-demo.yaml
+  - pages-triage.yaml
   - phoenix.yaml
   - qdrant.yaml
   - triage.yaml

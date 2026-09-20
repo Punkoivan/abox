@@ -1,0 +1,44 @@
+# The FDE onboarding runbook served at GET /howto, as a Flux-native OCI
+# artifact -- same delivery shape as graph-otel-demo.yaml, different content.
+# Unpacked, it's a "triage-howto" MemoryCell (xray.ai/v1, kind: howto) with
+# docs/howto.html's bytes inlined at spec.data.html, exactly what
+# `make apply-howto-cell` would emit in the triage-core source repo. Until
+# this cell is applied, /howto has no embedded default and 404s, and the
+# onboarding link on the landing page falls back to /about's baked-in white
+# paper instead -- see internal/httpapi/howto's doc comment.
+#
+# secretRef reuses triage-ghcr-pull since this OCIRepository lives in the
+# triage namespace (unlike triage-core/triage-agent's, which live in
+# flux-system and need the separate ghcr-credentials Secret there).
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: pages-triage
+  namespace: triage
+spec:
+  interval: 10m
+  url: oci://ghcr.io/den-vasyliev/abox/pages/triage
+  ref:
+    tag: latest
+  secretRef:
+    name: triage-ghcr-pull
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: pages-triage
+  namespace: triage
+spec:
+  interval: 10m
+  sourceRef:
+    kind: OCIRepository
+    name: pages-triage
+  path: ./
+  prune: false
+  # Same reasoning as graph-otel-demo.yaml: the MemoryCell CRD ships in
+  # triage-core's chart crds/ dir and installs with that chart, so this still
+  # needs the CRD to exist before its first apply can succeed; a failed
+  # attempt just retries every interval until it does.
+  dependsOn:
+    - name: releases
+      namespace: flux-system
