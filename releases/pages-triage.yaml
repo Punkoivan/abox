@@ -35,10 +35,9 @@ spec:
     name: pages-triage
   path: ./
   prune: false
-  # Same reasoning as graph-otel-demo.yaml: the MemoryCell CRD ships in
-  # triage-core's chart crds/ dir and installs with that chart, so this still
-  # needs the CRD to exist before its first apply can succeed; a failed
-  # attempt just retries every interval until it does.
-  dependsOn:
-    - name: releases
-      namespace: flux-system
+  # No dependsOn on flux-system/releases -- see graph-otel-demo.yaml's
+  # comment: releases (wait: true) health-checks this Kustomization as one of
+  # its own applied objects, so a dependsOn back onto releases deadlocks both
+  # sides. The MemoryCell CRD ships in triage-core's chart crds/ dir and
+  # installs with that chart; a failed attempt before the CRD exists just
+  # retries every interval until it does.

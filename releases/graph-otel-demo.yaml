@@ -34,14 +34,15 @@ spec:
     name: graph-otel-demo
   path: ./
   prune: false
-  # This repo has one flat Kustomization (flux-system/releases, path ./)
-  # applying every releases/*.yaml, triage-core's HelmRelease included --
-  # there's no per-app Kustomization to depend on instead. The MemoryCell CRD
-  # (xray.ai_memorycells.yaml) ships in triage-core's chart crds/ dir and is
-  # installed by Helm on that chart's install, so this still needs the CRD to
-  # exist before its first apply can succeed; a failed attempt just retries
-  # every interval until it does (ADR-033: re-applying the same blob is a
-  # no-op, so there's no harm reconciling early and often).
-  dependsOn:
-    - name: releases
-      namespace: flux-system
+  # No dependsOn on flux-system/releases: this repo has one flat Kustomization
+  # (flux-system/releases, path ./) applying every releases/*.yaml, and since
+  # THIS object is itself one of the things releases applies, releases
+  # (wait: true) health-checks it as part of its own readiness -- a
+  # dependsOn back onto releases would deadlock both sides waiting on each
+  # other (confirmed live: releases stuck retrying every 30s citing this
+  # Kustomization 'InProgress', while this one reported releases 'not
+  # ready'). The MemoryCell CRD (xray.ai_memorycells.yaml) ships in
+  # triage-core's chart crds/ dir and is installed by Helm on that chart's
+  # install; a failed attempt before the CRD exists just retries every
+  # interval until it does (ADR-033: re-applying the same blob is a no-op,
+  # so there's no harm reconciling early and often).
