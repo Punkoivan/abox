@@ -1,7 +1,12 @@
+# Same annotation as the Namespace in releases/agentgateway.yaml. Two
+# Kustomizations apply this namespace, and one without the annotation
+# strips it on every reconcile.
 apiVersion: v1
 kind: Namespace
 metadata:
   name: agentgateway-system
+  annotations:
+    triageagent.dev/tenant: triage
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: OCIRepository
