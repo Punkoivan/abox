@@ -6,6 +6,7 @@ resources:
   - agentgateway-llm.yaml
   - agentregistry.yaml
   - agent-retrieval.yaml
+  - graph-otel-demo.yaml
   - kagent.yaml
   - llama-cpp-embeddings.yaml
   - llmd.yaml

@@ -1,0 +1,47 @@
+# otel-demo's prebuilt service graph, as a Flux-native OCI artifact (the same
+# tar+gzip format this repo's own releases/ artifact uses, built and pushed
+# with `flux push artifact` outside this repo) -- unpacked, it's one manifest:
+# a MemoryCell (xray.ai/v1) with the tenant's graph.gob.gz bytes inlined at
+# spec.data.graph, exactly what `make apply-graph-cell TENANT=otel-demo`
+# would emit in the triage-core source repo. No values.yaml key for this in
+# the chart -- graphs are delivered out of Helm, per its own docs.
+#
+# secretRef reuses triage-ghcr-pull since this OCIRepository lives in the
+# triage namespace (unlike triage-core/triage-agent's, which live in
+# flux-system and need the separate ghcr-credentials Secret there).
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: graph-otel-demo
+  namespace: triage
+spec:
+  interval: 10m
+  url: oci://ghcr.io/den-vasyliev/abox/graphs/otel-demo
+  ref:
+    tag: latest
+  secretRef:
+    name: triage-ghcr-pull
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: graph-otel-demo
+  namespace: triage
+spec:
+  interval: 10m
+  sourceRef:
+    kind: OCIRepository
+    name: graph-otel-demo
+  path: ./
+  prune: false
+  # This repo has one flat Kustomization (flux-system/releases, path ./)
+  # applying every releases/*.yaml, triage-core's HelmRelease included --
+  # there's no per-app Kustomization to depend on instead. The MemoryCell CRD
+  # (xray.ai_memorycells.yaml) ships in triage-core's chart crds/ dir and is
+  # installed by Helm on that chart's install, so this still needs the CRD to
+  # exist before its first apply can succeed; a failed attempt just retries
+  # every interval until it does (ADR-033: re-applying the same blob is a
+  # no-op, so there's no harm reconciling early and often).
+  dependsOn:
+    - name: releases
+      namespace: flux-system
