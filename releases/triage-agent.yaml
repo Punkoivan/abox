@@ -1,0 +1,33 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: triage-agent
+  namespace: flux-system
+spec:
+  interval: 1h
+  url: oci://ghcr.io/den-vasyliev/abox/charts/triage-agent
+  ref:
+    tag: "0.21.0"
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: triage-agent
+  namespace: triage
+spec:
+  interval: 1h
+  releaseName: triage-agent
+  dependsOn:
+    - name: triage-core
+  chartRef:
+    kind: OCIRepository
+    name: triage-agent
+    namespace: flux-system
+  install:
+    createNamespace: true
+  values:
+    image:
+      repository: ghcr.io/den-vasyliev/abox/triage-agent
+      tag: v3.0.0-5933996-obi
+    # push (the WebSocket link to triage-core) stays off until its token
+    # Secret is prepared -- see releases/triage-core.yaml's clusterAgents.

@@ -16,4 +16,6 @@ resources:
   - phoenix.yaml
   - qdrant.yaml
   - triage.yaml
+  - triage-agent.yaml
+  - triage-core.yaml
   - xray-memory.yaml

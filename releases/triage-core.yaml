@@ -1,0 +1,36 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: triage-core
+  namespace: flux-system
+spec:
+  interval: 1h
+  url: oci://ghcr.io/den-vasyliev/abox/charts/triage-core
+  ref:
+    tag: "3.0.0"
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: triage-core
+  namespace: triage
+spec:
+  interval: 1h
+  releaseName: triage-core
+  chartRef:
+    kind: OCIRepository
+    name: triage-core
+    namespace: flux-system
+  install:
+    createNamespace: true
+  values:
+    image:
+      repository: ghcr.io/den-vasyliev/abox/triage-core
+      tag: sai-753e7f0d
+    # No Vertex AI / Workload Identity on KinD -- the same baked llama.cpp +
+    # nomic-embed-text-v1.5 sidecar releases/xray-memory.yaml and
+    # releases/llama-cpp-embeddings.yaml already run, at the chart's default
+    # image and settings.
+    embedding:
+      sidecar:
+        enabled: true
