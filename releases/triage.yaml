@@ -41,14 +41,18 @@ imagePullSecrets:
 # Ignore (set by the flux-operator bootstrap, alongside
 # fluxcd.controlplane.io/prune: disabled and kustomize.toolkit.fluxcd.io/
 # prune: Disabled) so nothing else fights the bootstrap over managing it.
-# Declaring it here records the intended state in git instead of only as a
-# `kubectl annotate namespace flux-system triageagent.dev/tenant=triage
-# --overwrite` run once, out of band -- whether the ssa:Ignore annotation
-# actually makes the releases Kustomization skip applying this object (as
-# opposed to just skipping prune-on-delete, a separate annotation) hasn't
-# been verified from source; if a reconcile does NOT keep this annotation on
-# the live namespace, the out-of-band kubectl command above is still the
-# fallback and this comment should say so.
+#
+# CONFIRMED (v0.11.14, live test): ssa: Ignore makes the releases
+# Kustomization skip applying this object entirely, not just skip pruning
+# it -- removing the annotation out of band and reconciling this file in did
+# NOT bring it back. This block is therefore inert; it stays only as the
+# documented intent. The actual mechanism is still the out-of-band command,
+# same convention as every Secret in this repo:
+#
+#   kubectl annotate namespace flux-system triageagent.dev/tenant=triage --overwrite
+#
+# Re-run it if this annotation is ever missing (e.g. after a Codespace
+# rebuild -- out-of-band cluster state doesn't survive one, see CLAUDE.md).
 apiVersion: v1
 kind: Namespace
 metadata:
