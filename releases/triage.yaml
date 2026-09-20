@@ -1,0 +1,29 @@
+# Namespace for Triage agent workloads. KinD needs a pull secret to fetch
+# private ghcr.io images here, same as every other private image in this repo
+# (see releases/xray-memory.yaml) -- pods 401 until it exists.
+#
+# The Secret itself is out-of-band cluster state, not in this repo, created
+# before any pod in this namespace first schedules:
+#
+#   kubectl -n triage create secret docker-registry triage-ghcr-pull \
+#     --docker-server=ghcr.io \
+#     --docker-username=<gh-username> \
+#     --docker-password="$(gh auth token)" \
+#     --docker-email=<email>
+#
+# default is patched with imagePullSecrets so any pod that doesn't set its own
+# serviceAccountName gets it for free. A Helm chart that creates its own
+# ServiceAccount (serviceAccount.create: true) needs the same secret name
+# added to its own imagePullSecrets value instead.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: triage
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: default
+  namespace: triage
+imagePullSecrets:
+  - name: triage-ghcr-pull

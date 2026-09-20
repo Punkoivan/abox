@@ -15,4 +15,5 @@ resources:
   - opentelemetry-demo.yaml
   - phoenix.yaml
   - qdrant.yaml
+  - triage.yaml
   - xray-memory.yaml
