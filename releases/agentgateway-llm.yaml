@@ -5,7 +5,9 @@
 # file and hot-reloads it.
 #
 # The file lives on a PVC. The seed ConfigMap is copied only when the file is
-# missing, so Flux never overwrites what was saved in the UI.
+# missing, so Flux never overwrites what was saved in the UI -- bumping this
+# seed alone does not reach an already-seeded pod; the PVC has to be deleted
+# (and the pod restarted) to force a reseed.
 #
 # The admin port (15000) has no auth and can rewrite the config, including
 # provider keys. Reach it with port-forward only; never route it:
@@ -14,6 +16,16 @@
 #
 # LLM traffic: http://agentgateway-llm.agentgateway-system.svc.cluster.local
 # (Service port 80 -> bind 8080, once a bind on 8080 is configured).
+#
+# config.database is what the Costs/Analytics/Logs pages in the UI need --
+# without it those pages have nothing to read and stay empty, which is why a
+# fresh install shows a short menu with whole LLM sections looking hidden.
+# SQLite on the same PVC the config file already lives on, so no second
+# volume. config.modelCatalog (dollar pricing on top of the token/call counts
+# the database already gives you) is deliberately left out here: agentgateway
+# has no built-in catalog, it has to come from `agctl catalog import` (pulls
+# from models.dev) or a hand-written file/inline entry, and with binds still
+# empty there are no providers/models yet for a catalog to price.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -23,6 +35,8 @@ data:
   config.yaml: |
     config:
       adminAddr: 0.0.0.0:15000
+      database:
+        url: "sqlite:///config/agentgateway.db?mode=rwc"
     binds: []
 ---
 apiVersion: v1
