@@ -39,7 +39,7 @@ spec:
   values:
     image:
       repository: ghcr.io/den-vasyliev/abox/triage-core
-      tag: sai-876440dd
+      tag: sai-3c2c9267
     # The chart's own serviceAccount.create renders a dedicated SA, not the
     # namespace default -- releases/triage.yaml's default-SA patch doesn't
     # cover it. imagePullSecrets here goes straight onto the pod spec.
