@@ -46,3 +46,39 @@ spec:
     credentials:
       secret:
         name: ngrok-operator-credentials
+---
+# Custom domain for triage-core and agentgateway-external, replacing the
+# free ngrok-assigned quietly-just-ferret.ngrok-free.app (still live and
+# untouched -- triage-ui's HTTPRoute still targets it, and this Domain/
+# AgentEndpoint pair were auto-created by the operator itself, not by this
+# repo, so there is nothing here to remove).
+#
+# The operator auto-creates a Domain the same way for a Gateway's listener
+# the first time an AgentEndpoint's spec.url names a hostname with no
+# matching reservation, so declaring the Domain explicitly here is about
+# making a deliberate custom domain reproducible in git, not strictly
+# required for the reservation itself to happen.
+apiVersion: ingress.k8s.ngrok.com/v1alpha1
+kind: Domain
+metadata:
+  name: triageagent-ngrok-dev
+  namespace: agentgateway-system
+spec:
+  domain: triageagent.ngrok.dev
+---
+# Publishes agentgateway-external's Service (the same upstream the
+# operator's own auto-created AgentEndpoint already tunnels on the free
+# domain) on the new custom domain too. Host-based HTTPRoutes on this
+# Gateway -- triage-core's now matches triageagent.ngrok.dev -- only become
+# reachable once a request actually arrives here with that Host header, so
+# this AgentEndpoint is what makes both "triage core" and "agentgateway"
+# reachable on the new domain in one resource.
+apiVersion: ngrok.k8s.ngrok.com/v1alpha1
+kind: AgentEndpoint
+metadata:
+  name: triageagent-ngrok-dev
+  namespace: agentgateway-system
+spec:
+  url: https://triageagent.ngrok.dev
+  upstream:
+    url: http://agentgateway-external.agentgateway-system:80
