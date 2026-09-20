@@ -65,7 +65,7 @@ spec:
     # releases/ngrok-operator.yaml, onto agentgateway-external.
     httpRoute:
       enabled: true
-      hostname: quietly-just-ferret.ngrok-free.app
+      hostname: triageagent.ngrok.dev
       gatewayName: agentgateway-external
       gatewayNamespace: agentgateway-system
       sectionName: http
