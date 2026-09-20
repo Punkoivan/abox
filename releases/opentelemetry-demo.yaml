@@ -80,3 +80,11 @@ spec:
             value: "false"
         service:
           port: 8089
+    # Chart default is 400Mi -- OOMKilled once the cluster grew past the
+    # scrape targets that limit was sized for (triage-core/agent, xray-memory,
+    # etc. added since).
+    prometheus:
+      server:
+        resources:
+          limits:
+            memory: 768Mi
