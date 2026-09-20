@@ -8,6 +8,19 @@ spec:
   url: oci://ghcr.io/den-vasyliev/abox/charts/triage-core
   ref:
     tag: "3.0.0"
+  # Unlike this repo's other OCI charts, this package is private (a personal
+  # GHCR package, not an org one -- ghcr.io/den-vasyliev/abox/charts/... has
+  # never been made public). source-controller has no credentials by default,
+  # so it 401s pulling the chart itself -- separate from, and before, any pod
+  # ever needs an imagePullSecret. Secret is out-of-band cluster state, not in
+  # this repo, created in flux-system before this OCIRepository reconciles:
+  #
+  #   kubectl -n flux-system create secret docker-registry ghcr-credentials \
+  #     --docker-server=ghcr.io \
+  #     --docker-username=<gh-username> \
+  #     --docker-password="$(gh auth token)"
+  secretRef:
+    name: ghcr-credentials
 ---
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease

@@ -8,6 +8,10 @@ spec:
   url: oci://ghcr.io/den-vasyliev/abox/charts/triage-agent
   ref:
     tag: "0.21.0"
+  # Private package, same as triage-core's OCIRepository -- see its comment
+  # for why and the Secret-creation command. Same ghcr-credentials Secret.
+  secretRef:
+    name: ghcr-credentials
 ---
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
