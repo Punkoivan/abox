@@ -52,3 +52,41 @@ spec:
     embedding:
       sidecar:
         enabled: true
+    # Cluster-agent WS handshake. tokensSecret's data key (below) must equal
+    # triage-agent's push.clusterName ("abox") -- both point at the same
+    # triage-cluster-agent-tokens/triage-agent-push token value. Unverified:
+    # the chart comment describes "<tenant>.<cluster>" pin keys but
+    # triage-agent runs target.tenant: "" (cluster-mode); confirm the key
+    # format against this controller's logs on first connect attempt.
+    clusterAgents:
+      enabled: true
+      tokensSecret: triage-cluster-agent-tokens
+    # Exposed through the ngrok tunnel already wired via
+    # releases/ngrok-operator.yaml, onto agentgateway-external.
+    httpRoute:
+      enabled: true
+      hostname: quietly-just-ferret.ngrok-free.app
+      gatewayName: agentgateway-external
+      gatewayNamespace: agentgateway-system
+      sectionName: http
+    # tokensSecret names an EXISTING Secret (unlike leaving auth empty, which
+    # has the chart generate <fullname>-api-tokens itself) -- triage-api-tokens
+    # already exists in-cluster, out-of-band.
+    auth:
+      tokensSecret: triage-api-tokens
+    # No provider and no auth.token/tokensSecret would fail the whole HTTP API
+    # closed (chart default). GitHub SSO's clientSecret comes from the
+    # triage-github-oauth Secret (GITHUB_CLIENT_SECRET key), already in-cluster.
+    sso:
+      publicURL: https://quietly-just-ferret.ngrok-free.app
+      github:
+        clientId: Ov23li6QQzPWxk27mHpy
+        secretRef:
+          name: triage-github-oauth
+          key: GITHUB_CLIENT_SECRET
+    runtimeConfig:
+      vectorStore:
+        enabled: true
+      eventSources:
+        kubernetes:
+          enabled: true

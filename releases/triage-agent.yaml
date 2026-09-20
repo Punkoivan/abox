@@ -37,5 +37,19 @@ spec:
     # default, so imagePullSecrets goes on the values, not just the SA patch.
     imagePullSecrets:
       - name: triage-ghcr-pull
-    # push (the WebSocket link to triage-core) stays off until its token
-    # Secret is prepared -- see releases/triage-core.yaml's clusterAgents.
+    # WS link to triage-core's events endpoint. releaseName here is
+    # triage-core, so the chart's fullname IS the release name and the
+    # events Service is triage-core-events (not triage-triage-core-events,
+    # which is what you'd get from a release literally named "triage").
+    # clusterName must match the data key in both triage-cluster-agent-tokens
+    # (on triage-core) and existingSecret's token value here -- same secret
+    # value, different Secret objects.
+    push:
+      enabled: true
+      host: triage-core-events.triage.svc.cluster.local:8086
+      scheme: ws
+      allowPlaintext: true
+      clusterName: abox
+      existingSecret: triage-agent-push
+    ebpf:
+      enabled: true
