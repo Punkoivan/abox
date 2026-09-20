@@ -32,7 +32,7 @@ spec:
   values:
     image:
       repository: ghcr.io/den-vasyliev/abox/triage-agent
-      tag: v3.0.0-5933996-obi
+      tag: v3.0.5-2927350-obi
     # Same reason as triage-core: the chart's own SA, not the namespace
     # default, so imagePullSecrets goes on the values, not just the SA patch.
     imagePullSecrets:
