@@ -42,8 +42,8 @@ metadata:
   # otel-demo. Declared here because the releases Kustomization prunes
   # annotations added by hand on its next reconcile.
   annotations:
-    triage/tenant: otel-demo
-    triage/virtual-app-identity: workload
+    triageagent.dev/tenant: otel-demo
+    triageagent.dev/virtual-app-identity: workload
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: HelmRepository
