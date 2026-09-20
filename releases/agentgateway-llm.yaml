@@ -62,12 +62,10 @@
 # plaintext, no auth, matching how phoenix-svc is otherwise only reachable
 # from inside the cluster. This traces ag-llm's own proxy hop; it says
 # nothing about whether triage-core's own LLM calls reach Phoenix (they
-# don't yet -- see releases/triage-core.yaml's otelTracing block) or whether
-# triage-core's calls even route through this gateway at all (they don't:
-# the chart has no values.yaml knob to source runtimeConfig.model.apiKey
-# from a flag/Secret instead of the plaintext-readable MemoryCell document,
-# so pointing triage-core's baseURL here is blocked on a chart change
-# upstream, not something to route around by weakening apiKey.mode).
+# don't yet -- see releases/triage-core.yaml's otelTracing block).
+# triage-core routes through this gateway: releases/triage-core.yaml sets
+# runtimeConfig.models.main.baseURL here and names the Secret holding
+# TRIAGE_LLM_KEY in models.main.apiKeySecretRef.
 #
 # llm.policies.guardrails is regex-only: built-in PII detectors (mask, so a
 # false positive degrades rather than breaks the request) plus the same

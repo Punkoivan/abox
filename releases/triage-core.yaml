@@ -39,7 +39,7 @@ spec:
   values:
     image:
       repository: ghcr.io/den-vasyliev/abox/triage-core
-      tag: sai-3c2c9267
+      tag: sai-da8d1a7d
     # The chart's own serviceAccount.create renders a dedicated SA, not the
     # namespace default -- releases/triage.yaml's default-SA patch doesn't
     # cover it. imagePullSecrets here goes straight onto the pod spec.
@@ -85,6 +85,21 @@ spec:
           name: triage-github-oauth
           key: GITHUB_CLIENT_SECRET
     runtimeConfig:
+      # triage-core's LLM calls go through ag-llm. The bearer key is the
+      # "triage" virtual key ag-llm budgets and prices by. The document names
+      # the Secret only; create it in this namespace with the same value as
+      # agentgateway-llm-secrets/TRIAGE_LLM_KEY:
+      #   kubectl -n triage create secret generic triage-llm-key \
+      #     --from-literal=TRIAGE_LLM_KEY=<same bearer token>
+      # The key is read when the agent starts, so restart the pod after
+      # creating or rotating the Secret.
+      models:
+        main:
+          baseURL: http://agentgateway-llm.agentgateway-system.svc.cluster.local
+          name: gemini-2.5-flash
+          apiKeySecretRef:
+            name: triage-llm-key
+            key: TRIAGE_LLM_KEY
       vectorStore:
         enabled: true
       eventSources:
