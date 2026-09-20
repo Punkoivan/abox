@@ -36,3 +36,22 @@ metadata:
   namespace: triage
 imagePullSecrets:
   - name: triage-ghcr-pull
+---
+# flux-system's own Namespace object carries kustomize.toolkit.fluxcd.io/ssa:
+# Ignore (set by the flux-operator bootstrap, alongside
+# fluxcd.controlplane.io/prune: disabled and kustomize.toolkit.fluxcd.io/
+# prune: Disabled) so nothing else fights the bootstrap over managing it.
+# Declaring it here records the intended state in git instead of only as a
+# `kubectl annotate namespace flux-system triageagent.dev/tenant=triage
+# --overwrite` run once, out of band -- whether the ssa:Ignore annotation
+# actually makes the releases Kustomization skip applying this object (as
+# opposed to just skipping prune-on-delete, a separate annotation) hasn't
+# been verified from source; if a reconcile does NOT keep this annotation on
+# the live namespace, the out-of-band kubectl command above is still the
+# fallback and this comment should say so.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: flux-system
+  annotations:
+    triageagent.dev/tenant: triage
