@@ -15,10 +15,19 @@
 # serviceAccountName gets it for free. A Helm chart that creates its own
 # ServiceAccount (serviceAccount.create: true) needs the same secret name
 # added to its own imagePullSecrets value instead.
+#
+# triageagent.dev/tenant scopes this namespace's own workloads into the
+# triage agent (cluster mode) as tenant "triage" -- same mechanism as
+# opentelemetry-demo.yaml's otel-demo namespace, just watching the platform's
+# own triage-core/triage-agent pods instead of a demo app. A namespace with no
+# Tenant annotation is dropped rather than filed into a default (core's
+# annotationkeys package).
 apiVersion: v1
 kind: Namespace
 metadata:
   name: triage
+  annotations:
+    triageagent.dev/tenant: triage
 ---
 apiVersion: v1
 kind: ServiceAccount

@@ -1,7 +1,11 @@
+# triageagent.dev/tenant scopes this namespace into the triage agent
+# (cluster mode) as tenant "triage" -- see releases/triage.yaml's comment.
 apiVersion: v1
 kind: Namespace
 metadata:
   name: agentgateway-system
+  annotations:
+    triageagent.dev/tenant: triage
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: OCIRepository
