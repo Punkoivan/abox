@@ -45,4 +45,13 @@ spec:
     server:
       flag_options:
         - serve_artifacts
+      # DNS-rebinding guard (mlflow.server.fastapi_security), on since 3.14.
+      # Default allowlist is localhost + private IPs by literal address, not
+      # by hostname -- releases/mlflow-otel-collector.yaml calls this Service
+      # by its cluster DNS name, so every export 403'd ("Rejected request
+      # with invalid Host header") until this was added. port-forward access
+      # (localhost/127.0.0.1) still needs its own entry once this is set --
+      # passing --allowed-hosts replaces the default list, doesn't extend it.
+      value_options:
+        allowed-hosts: "mlflow-mlflow.mlflow.svc.cluster.local,localhost,127.0.0.1"
     # kubectl port-forward -n mlflow svc/mlflow-mlflow 5000:5000
