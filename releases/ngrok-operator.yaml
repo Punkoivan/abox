@@ -8,44 +8,10 @@
 #
 #   kubectl -n ngrok-operator create secret generic ngrok-operator-credentials \
 #     --from-literal=API_KEY=<api key> --from-literal=AUTHTOKEN=<authtoken>
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: ngrok-operator
----
-apiVersion: source.toolkit.fluxcd.io/v1
-kind: HelmRepository
-metadata:
-  name: ngrok
-  namespace: flux-system
-spec:
-  interval: 1h
-  url: https://charts.ngrok.com
----
-apiVersion: helm.toolkit.fluxcd.io/v2
-kind: HelmRelease
-metadata:
-  name: ngrok-operator
-  namespace: ngrok-operator
-spec:
-  interval: 1h
-  releaseName: ngrok-operator
-  chart:
-    spec:
-      chart: ngrok-operator
-      version: "0.24.0"
-      sourceRef:
-        kind: HelmRepository
-        name: ngrok
-        namespace: flux-system
-  install:
-    createNamespace: true
-    remediation:
-      retries: -1
-  values:
-    credentials:
-      secret:
-        name: ngrok-operator-credentials
+#
+# The operator's own Namespace/HelmRepository/HelmRelease live in
+# releases/crds/ngrok-operator.yaml, not here -- see that file's comment.
+# This file only has the two custom resources that need the CRD it installs.
 ---
 # Custom domain for triage-core, triage-ui and agentgateway-external,
 # replacing the free ngrok-assigned quietly-just-ferret.ngrok-free.app.

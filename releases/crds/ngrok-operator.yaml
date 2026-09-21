@@ -1,0 +1,56 @@
+# The operator half of releases/ngrok-operator.yaml, split out here so it
+# reconciles via releases-crds (dependsOn'd by releases, wait: true) instead
+# of alongside the Domain/AgentEndpoint that need ingress.k8s.ngrok.com CRDs.
+#
+# Not a "-crds"-flavored chart like kagent-crds/agentgateway-crds -- the
+# ngrok-operator chart bundles CRDs and controller together, there's no
+# separate CRD-only package to install first. Same fix either way: the CRD
+# provider has to be Ready before anything that references the CRD is
+# dry-run, and releases-crds's wait: true is what gets that guarantee. Discovered
+# 2026-09-21: this cluster's first-ever boot with the Domain resource
+# (added 2026-09-20, commit a9545fd) present from the start -- every prior
+# apply had ngrok-operator's chart, and so its CRD, already installed, so the
+# race never showed. A from-scratch cluster hits it on the very first
+# reconcile: Domain dry-run-fails before ngrok-operator's HelmRelease (in the
+# same flat Kustomization, no ordering between them) ever gets a chance to
+# install, and every retry repeats the same failure -- kustomize-controller
+# applying a HelmRelease object is not the same as helm-controller finishing
+# the chart install it asynchronously triggers.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ngrok-operator
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: ngrok
+  namespace: flux-system
+spec:
+  interval: 1h
+  url: https://charts.ngrok.com
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: ngrok-operator
+  namespace: ngrok-operator
+spec:
+  interval: 1h
+  releaseName: ngrok-operator
+  chart:
+    spec:
+      chart: ngrok-operator
+      version: "0.24.0"
+      sourceRef:
+        kind: HelmRepository
+        name: ngrok
+        namespace: flux-system
+  install:
+    createNamespace: true
+    remediation:
+      retries: -1
+  values:
+    credentials:
+      secret:
+        name: ngrok-operator-credentials
