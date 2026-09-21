@@ -80,11 +80,53 @@ spec:
             value: "false"
         service:
           port: 8089
-    # Chart default is 400Mi -- OOMKilled once the cluster grew past the
-    # scrape targets that limit was sized for (triage-core/agent, xray-memory,
-    # etc. added since).
+    # Bundled jaeger/prometheus/grafana/opensearch backends disabled --
+    # traces now consolidate into mlflow (releases/mlflow.yaml) via the
+    # bridge collector (releases/mlflow-otel-collector.yaml), same as
+    # triage-core. Metrics/logs still generate (span_metrics connector,
+    # kafkametrics, etc.) but their pipelines now only export to debug --
+    # mlflow's OTLP ingestion is traces-only here, and standing up metrics/
+    # logs backends wasn't asked for. Frees ~1.7Gi mem + 1+ CPU on a
+    # constrained KinD node: jaeger alone requested 600Mi, prometheus 768Mi,
+    # opensearch 1 CPU/100Mi, grafana 150m/256Mi.
+    jaeger:
+      enabled: false
     prometheus:
-      server:
-        resources:
-          limits:
-            memory: 768Mi
+      enabled: false
+    grafana:
+      enabled: false
+    opensearch:
+      enabled: false
+    opentelemetry-collector:
+      config:
+        exporters:
+          # otlp_grpc/jaeger, otlp_http/prometheus, opensearch removed
+          # outright (not just dropped from their pipelines below) -- same
+          # rule as mlflow-otel-collector.yaml: the collector refuses to
+          # start with an exporter defined but not referenced by any
+          # pipeline, and their backends are gone now anyway.
+          otlp_grpc/jaeger: null
+          otlp_http/prometheus: null
+          opensearch: null
+          # Same bridge triage-core sends through, same protocol (gRPC) this
+          # chart's other otlp_grpc/* exporters already use for in-cluster
+          # targets -- one collector, one mlflow endpoint/header config to
+          # maintain instead of duplicating the x-mlflow-experiment-id header
+          # setup here too.
+          otlp_grpc/mlflow-bridge:
+            endpoint: otel-collector.mlflow.svc.cluster.local:4317
+            tls:
+              insecure: true
+        service:
+          pipelines:
+            traces:
+              exporters:
+                - debug
+                - span_metrics
+                - otlp_grpc/mlflow-bridge
+            metrics:
+              exporters:
+                - debug
+            logs:
+              exporters:
+                - debug
