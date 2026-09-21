@@ -33,6 +33,11 @@ spec:
     image:
       repository: ghcr.io/den-vasyliev/abox/triage-agent
       tag: v3.0.5-2927350-obi
+    # Scopes this agent to the otel-demo tenant's graph (releases/
+    # graph-otel-demo.yaml's MemoryCell) instead of cluster-mode
+    # (target.tenant: "", watches every tenant).
+    target:
+      tenant: otel-demo
     # Same reason as triage-core: the chart's own SA, not the namespace
     # default, so imagePullSecrets goes on the values, not just the SA patch.
     imagePullSecrets:
