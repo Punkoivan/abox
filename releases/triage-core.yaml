@@ -85,21 +85,47 @@ spec:
           name: triage-github-oauth
           key: GITHUB_CLIENT_SECRET
     runtimeConfig:
-      # triage-core's LLM calls go through ag-llm. The bearer key is the
-      # "triage" virtual key ag-llm budgets and prices by. The document names
-      # the Secret only; create it in this namespace with the same value as
-      # agentgateway-llm-secrets/TRIAGE_LLM_KEY:
-      #   kubectl -n triage create secret generic triage-llm-key \
-      #     --from-literal=TRIAGE_LLM_KEY=<same bearer token>
-      # The key is read when the agent starts, so restart the pod after
-      # creating or rotating the Secret.
+      # Direct to Google, not through agentgateway-llm -- ag-llm v1.5.0 has a
+      # confirmed bug routing an AI-Studio API key on the Gemini provider:
+      # setup_request's x-goog-api-key relocation (agentgateway-llm.yaml's
+      # comment on frontendPolicies.tracing has the old ag-llm-routed state;
+      # this replaces it) runs before apply_backend_auth sets the
+      # Authorization header, so the key goes out unrelocated and Google's
+      # native generateContent endpoint 401s it ("Expected OAuth 2 access
+      # token..."). Reproduced directly against
+      # generativelanguage.googleapis.com with the real key -- not a key or
+      # model-name problem.
+      #
+      # Gemini's own OpenAI-compatible endpoint takes the same API key as a
+      # plain `Authorization: Bearer` -- confirmed working directly with curl
+      # -- which is exactly the auth style GatewayModel (baseURL set) already
+      # sends. So baseURL points straight at that endpoint instead of at
+      # ag-llm; the API key is the real Gemini key here, not ag-llm's virtual
+      # "triage" token, so it lives in its own Secret in this namespace:
+      #   kubectl -n triage create secret generic triage-gemini-key \
+      #     --from-literal=GEMINI_API_KEY=<gemini api key>
+      # Read at agent start, so restart the pod after creating or rotating it.
+      #
+      # guardrailEnabled + the guardrail model turn on the LLM-based event
+      # classifier (internal/core/guardrail.go's regex layer runs regardless,
+      # this is the separate LLM classifier pass, GuardrailClassifierConfig).
+      # rca is left unset: BuildRCA falls back to this guardrail model when
+      # spec.RCAModel is nil (core/agent.go), so it isn't left on the Vertex
+      # AI path that doesn't authenticate on KinD.
       models:
         main:
-          baseURL: http://agentgateway-llm.agentgateway-system.svc.cluster.local
+          baseURL: https://generativelanguage.googleapis.com/v1beta/openai
           name: gemini-2.5-flash
           apiKeySecretRef:
-            name: triage-llm-key
-            key: TRIAGE_LLM_KEY
+            name: triage-gemini-key
+            key: GEMINI_API_KEY
+        guardrailEnabled: true
+        guardrail:
+          baseURL: https://generativelanguage.googleapis.com/v1beta/openai
+          name: gemini-2.5-flash
+          apiKeySecretRef:
+            name: triage-gemini-key
+            key: GEMINI_API_KEY
       vectorStore:
         enabled: true
       eventSources:
