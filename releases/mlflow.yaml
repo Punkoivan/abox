@@ -52,6 +52,16 @@ spec:
       # with invalid Host header") until this was added. port-forward access
       # (localhost/127.0.0.1) still needs its own entry once this is set --
       # passing --allowed-hosts replaces the default list, doesn't extend it.
+      #
+      # Every entry needs a bare form AND a ":*" form. is_allowed_host_header
+      # (mlflow/server/security_utils.py) does `host == allowed` unless the
+      # allowed entry itself contains "*", in which case it's fnmatch'd --
+      # there is no automatic port-agnostic matching. The incoming Host
+      # header always carries the port (":5000", non-default), so a bare
+      # hostname with no ":*" companion never matches and still 403s --
+      # confirmed live via the otel-collector's export logs still showing
+      # "Rejected request with invalid Host header: mlflow-mlflow.mlflow.
+      # svc.cluster.local:5000" after adding the bare hostname alone.
       value_options:
-        allowed-hosts: "mlflow-mlflow.mlflow.svc.cluster.local,localhost,127.0.0.1"
+        allowed-hosts: "mlflow-mlflow.mlflow.svc.cluster.local,mlflow-mlflow.mlflow.svc.cluster.local:*,localhost,localhost:*,127.0.0.1,127.0.0.1:*"
     # kubectl port-forward -n mlflow svc/mlflow-mlflow 5000:5000
