@@ -64,23 +64,30 @@ spec:
       # svc.cluster.local:5000" after adding the bare hostname alone.
       value_options:
         allowed-hosts: "mlflow-mlflow.mlflow.svc.cluster.local,mlflow-mlflow.mlflow.svc.cluster.local:*,localhost,localhost:*,127.0.0.1,127.0.0.1:*"
-        # Chart default is 4 gunicorn workers, each a full copy of the
-        # ghcr.io/mlflow/mlflow:*-full image's process (sklearn/torch/etc
-        # all importable, not just the tracking server) -- too much both
-        # for this sandbox's shared KinD node (otel-demo alone runs ~25
-        # pods on it) and, per the OOMKill below, too much memory per
-        # worker. Cut to 1: light demo traffic doesn't need concurrency.
-        workers: 1
+        # `mlflow server --workers=N` is a bare `uvicorn --workers N
+        # mlflow.server.fastapi_app:app` underneath (confirmed live via
+        # /proc/*/cmdline -- no gunicorn, no worker-class layer). Each
+        # worker is its own process with its own asyncio event loop, and
+        # /health shares that loop with every other route including
+        # /v1/traces ingestion. At workers=1 there is exactly one loop for
+        # the whole pod: a synchronous SQLite write stalling that loop
+        # while otel-demo's ~25-30 services' spans arrive stalls /health
+        # right along with it, and kubelet kills the pod on the next
+        # missed liveness check -- confirmed live, this is what was
+        # producing the crash loop, not just insufficient CPU/memory.
+        # workers=2 so a slow request on one process can't take the
+        # health check down with it; the OOMKill below is why it isn't
+        # higher.
+        workers: 2
     # No resources block by default -- the pod was BestEffort QoS, first in
     # line to be CPU-starved by the rest of the cluster (otel-demo's ~25
-    # pods share this node). Confirmed live: /health stopped responding
-    # within the liveness probe's 1s timeout under load, and the chart
-    # exposes no probe-tuning values to compensate (unlike phoenix.yaml's
-    # healthChecks.startupProbe.*), so a real CPU floor is the only lever.
-    # First attempt at a 1Gi memory limit (2 workers) OOMKilled (exit 137)
-    # within seconds of the Uvicorn parent process starting -- the -full
-    # image's baseline per-worker footprint is bigger than that. Cut to 1
-    # worker and doubled the ceiling.
+    # pods share this node). The chart exposes no probe-tuning values to
+    # compensate (unlike phoenix.yaml's healthChecks.startupProbe.*), so a
+    # real CPU/memory floor plus enough worker processes (above) are the
+    # only levers. First attempt at workers=2/1Gi OOMKilled (exit 137)
+    # within seconds of the Uvicorn parent starting -- the -full image's
+    # per-worker footprint (sklearn/torch/etc all importable) is bigger
+    # than that. 2Gi is double that failed ceiling for the same 2 workers.
     resources:
       requests:
         cpu: 250m
