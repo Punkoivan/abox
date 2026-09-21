@@ -22,6 +22,34 @@ metadata:
 spec:
   interval: 1h
   releaseName: mlflow
+  # Chart hardcodes both probes' timeoutSeconds: 1 with no values-level
+  # override (unlike phoenix.yaml's healthChecks.startupProbe.*) -- too
+  # tight for a Python/asyncio server under this cluster's concurrent
+  # trace-ingestion load from otel-demo's ~25-30 services. Confirmed live:
+  # a restart with exitCode 0/"Completed" (a clean SIGTERM from a failed
+  # liveness probe, not a crash) and the event "context deadline exceeded
+  # (Client.Timeout exceeded while awaiting headers)" -- the server was up
+  # and got a connection, just didn't answer inside 1s. Same postRenderer
+  # mechanism kagent.yaml uses for its version-label fix.
+  postRenderers:
+    - kustomize:
+        patches:
+          - patch: |
+              - op: replace
+                path: /spec/template/spec/containers/0/livenessProbe/timeoutSeconds
+                value: 5
+              - op: replace
+                path: /spec/template/spec/containers/0/livenessProbe/failureThreshold
+                value: 5
+              - op: replace
+                path: /spec/template/spec/containers/0/readinessProbe/timeoutSeconds
+                value: 5
+              - op: replace
+                path: /spec/template/spec/containers/0/readinessProbe/failureThreshold
+                value: 5
+            target:
+              kind: Deployment
+              labelSelector: app.kubernetes.io/name=mlflow
   chartRef:
     kind: OCIRepository
     name: mlflow
