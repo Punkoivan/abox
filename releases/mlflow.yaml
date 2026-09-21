@@ -64,4 +64,22 @@ spec:
       # svc.cluster.local:5000" after adding the bare hostname alone.
       value_options:
         allowed-hosts: "mlflow-mlflow.mlflow.svc.cluster.local,mlflow-mlflow.mlflow.svc.cluster.local:*,localhost,localhost:*,127.0.0.1,127.0.0.1:*"
+        # Chart default is 4 gunicorn workers -- too much baseline CPU for
+        # this sandbox's shared KinD node (otel-demo alone runs ~25 pods on
+        # it). Halved to lower the idle footprint that was contributing to
+        # the crash loop below.
+        workers: 2
+    # No resources block by default -- the pod was BestEffort QoS, first in
+    # line to be CPU-starved by the rest of the cluster (otel-demo's ~25
+    # pods share this node). Confirmed live: /health stopped responding
+    # within the liveness probe's 1s timeout under load, and the chart
+    # exposes no probe-tuning values to compensate (unlike phoenix.yaml's
+    # healthChecks.startupProbe.*), so a real CPU floor is the only lever.
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
     # kubectl port-forward -n mlflow svc/mlflow-mlflow 5000:5000
