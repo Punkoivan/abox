@@ -39,7 +39,7 @@ spec:
   values:
     image:
       repository: ghcr.io/den-vasyliev/abox/triage-core
-      tag: sai-da8d1a7d
+      tag: sai-28e2a563
     # The chart's own serviceAccount.create renders a dedicated SA, not the
     # namespace default -- releases/triage.yaml's default-SA patch doesn't
     # cover it. imagePullSecrets here goes straight onto the pod spec.
@@ -126,6 +126,17 @@ spec:
           apiKeySecretRef:
             name: triage-gemini-key
             key: GEMINI_API_KEY
+      # Voice: the UI opens /v2/agent/voice/session and the core bridges it to
+      # a Gemini Live session. Gemini Live has no agentgateway backend, so
+      # voice goes from triage-core straight to Google with the same Gemini
+      # key Secret the models use. model is left unset: the core picks its
+      # Google AI default Live model.
+      voice:
+        enabled: true
+        name: Kore
+        apiKeySecretRef:
+          name: triage-gemini-key
+          key: GEMINI_API_KEY
       vectorStore:
         enabled: true
       eventSources:

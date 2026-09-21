@@ -33,7 +33,7 @@
 # WebSocket protocol agentgateway has no backend type for (it proxies exactly
 # one realtime WS protocol today, OpenAI Realtime; there is no Gemini-Live
 # equivalent), so voice bypasses this gateway entirely and goes straight from
-# LiveKit to Gemini. GEMINI_API_KEY is a container env var (Secret, out of
+# triage-core to Gemini. GEMINI_API_KEY is a container env var (Secret, out of
 # band, same convention as every other credential in this repo):
 #
 #   kubectl -n agentgateway-system create secret generic agentgateway-llm-secrets \
