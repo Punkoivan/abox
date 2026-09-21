@@ -1,0 +1,48 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mlflow
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: mlflow
+  namespace: flux-system
+spec:
+  interval: 1h
+  url: oci://ghcr.io/mlflow/charts/mlflow
+  ref:
+    tag: "0.1.0"
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: mlflow
+  namespace: mlflow
+spec:
+  interval: 1h
+  releaseName: mlflow
+  chartRef:
+    kind: OCIRepository
+    name: mlflow
+    namespace: flux-system
+  install:
+    createNamespace: true
+  values:
+    # No external Postgres or object store in this sandbox: SQLite backend
+    # store and server-proxied artifacts both land on one PVC. The chart
+    # requires backendStoreUri (or backendStoreUriFrom) or the Deployment
+    # template fails the render outright.
+    storage:
+      enabled: true
+    mlflow:
+      backendStoreUri: "sqlite:////mlflow/mlflow.db"
+      # serve_artifacts (below) proxies uploads/downloads through the
+      # tracking server instead of clients writing straight to a path, so
+      # defaultArtifactRoot points at the proxy scheme rather than a real URI.
+      defaultArtifactRoot: "mlflow-artifacts:/"
+      artifactsDestination: "/mlflow/artifacts"
+    server:
+      flag_options:
+        - serve_artifacts
+    # kubectl port-forward -n mlflow svc/mlflow-mlflow 5000:5000

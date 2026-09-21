@@ -258,13 +258,20 @@ spec:
       # Off by default (runtimeConfig.otelTracing.enabled: false in the
       # chart) -- nothing exported triage-core's own LLM/guardrail/agent
       # spans anywhere until this. grpc is the only protocol the exporter
-      # build supports; insecure: true because phoenix-svc has no TLS
-      # (ClusterIP+NodePort, in-cluster only). projectName splits triage's
-      # spans into their own Phoenix project instead of landing in the
-      # default one every untenanted deployment shares.
+      # build supports; insecure: true because the target has no TLS
+      # (ClusterIP, in-cluster only).
+      #
+      # endpoint points at releases/mlflow-otel-collector.yaml's collector, not
+      # at MLflow directly -- MLflow's tracking server only accepts OTLP/HTTP
+      # at /v1/traces, and this exporter only ever speaks gRPC, so something
+      # has to sit between them and re-export. Was
+      # phoenix-svc.phoenix.svc.cluster.local:4317 (still gRPC-native, no
+      # bridge needed); Phoenix is left running but no longer receives these
+      # spans. projectName is a Phoenix-specific field the mlflow-bound
+      # collector ignores -- harmless leftover, not read by anything now.
       otelTracing:
         enabled: true
-        endpoint: phoenix-svc.phoenix.svc.cluster.local:4317
+        endpoint: otel-collector.mlflow.svc.cluster.local:4317
         protocol: grpc
         insecure: true
         serviceName: triage-core

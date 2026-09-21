@@ -11,6 +11,8 @@ resources:
   - llama-cpp-embeddings.yaml
   - llmd.yaml
   - mcp-servers.yaml
+  - mlflow.yaml
+  - mlflow-otel-collector.yaml
   - neo4j.yaml
   - ngrok-operator.yaml
   - opentelemetry-demo.yaml
