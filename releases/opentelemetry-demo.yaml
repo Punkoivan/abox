@@ -81,14 +81,11 @@ spec:
         service:
           port: 8089
     # Bundled jaeger/prometheus/grafana/opensearch backends disabled --
-    # traces now consolidate into mlflow (releases/mlflow.yaml) via the
-    # bridge collector (releases/mlflow-otel-collector.yaml), same as
-    # triage-core. Metrics/logs still generate (span_metrics connector,
-    # kafkametrics, etc.) but their pipelines now only export to debug --
-    # mlflow's OTLP ingestion is traces-only here, and standing up metrics/
-    # logs backends wasn't asked for. Frees ~1.7Gi mem + 1+ CPU on a
-    # constrained KinD node: jaeger alone requested 600Mi, prometheus 768Mi,
-    # opensearch 1 CPU/100Mi, grafana 150m/256Mi.
+    # frees ~1.7Gi mem + 1+ CPU on a constrained KinD node: jaeger alone
+    # requested 600Mi, prometheus 768Mi, opensearch 1 CPU/100Mi, grafana
+    # 150m/256Mi. Traces additionally consolidate into mlflow
+    # (releases/mlflow.yaml) via the bridge collector
+    # (releases/mlflow-otel-collector.yaml), same as triage-core.
     jaeger:
       enabled: false
     prometheus:
@@ -100,33 +97,44 @@ spec:
     opentelemetry-collector:
       config:
         exporters:
-          # otlp_grpc/jaeger, otlp_http/prometheus, opensearch removed
-          # outright (not just dropped from their pipelines below) -- same
-          # rule as mlflow-otel-collector.yaml: the collector refuses to
-          # start with an exporter defined but not referenced by any
-          # pipeline, and their backends are gone now anyway.
-          otlp_grpc/jaeger: null
-          otlp_http/prometheus: null
-          opensearch: null
-          # Same bridge triage-core sends through, same protocol (gRPC) this
-          # chart's other otlp_grpc/* exporters already use for in-cluster
-          # targets -- one collector, one mlflow endpoint/header config to
-          # maintain instead of duplicating the x-mlflow-experiment-id header
-          # setup here too.
+          # The chart's default otlp_grpc/jaeger, otlp_http/prometheus and
+          # opensearch exporters are deliberately left wired to their
+          # original (now-backendless) endpoints rather than nulled out.
+          # This chart nests them 3 levels deep -- umbrella chart's own
+          # values.yaml sets the concrete defaults for the opentelemetry-
+          # collector *subchart's* config, so a HelmRelease-level `key:
+          # null` override has to survive being coalesced through that
+          # extra layer. It doesn't in this cluster's Helm: verified live
+          # via `helm get manifest` that the null literally lands in the
+          # rendered ConfigMap (`otlp_grpc/jaeger: null`) instead of
+          # deleting the key -- unlike a plain `helm template` locally,
+          # and unlike mlflow-otel-collector.yaml's receivers.jaeger/
+          # receivers.zipkin nulls, which delete fine because that chart
+          # is installed flat (one level, no umbrella/subchart layering).
+          # A null landing as a literal fails the exporter's own field
+          # validation at startup ("endpoint must be specified") -- a
+          # harder failure than the "defined but unused" case this was
+          # trying to avoid. Dropping them from the pipeline below instead
+          # (definition intact, reference removed) hits that unused-
+          # component startup failure. So: leave both definition and
+          # pipeline reference as upstream default -- they just log
+          # harmless connection errors now that jaeger/prometheus/
+          # opensearch are gone. Same bridge triage-core sends through,
+          # same protocol (gRPC) this chart's other otlp_grpc/* exporters
+          # already use for in-cluster targets.
           otlp_grpc/mlflow-bridge:
             endpoint: otel-collector.mlflow.svc.cluster.local:4317
             tls:
               insecure: true
         service:
           pipelines:
+            # metrics/logs pipelines are left untouched (chart defaults:
+            # otlp_http/prometheus+debug / opensearch+debug) -- only traces
+            # additionally routes to mlflow, matching mlflow-otel-
+            # collector.yaml's traces-only OTLP ingestion.
             traces:
               exporters:
+                - otlp_grpc/jaeger
                 - debug
                 - span_metrics
                 - otlp_grpc/mlflow-bridge
-            metrics:
-              exporters:
-                - debug
-            logs:
-              exporters:
-                - debug
