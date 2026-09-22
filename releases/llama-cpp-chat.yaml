@@ -1,0 +1,79 @@
+# Chat-capable llama.cpp server for retrieval-agent / k8s-agent / xray-agent
+# / voice-router. See harness-course/docs/adr/0003-chat-model-for-kagent-agents.md
+# for the full reasoning (image built locally, loaded into KinD nodes with
+# `kind load docker-image`, no registry -- imagePullPolicy: IfNotPresent
+# means this survives as long as the nodes keep the image cached).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llama-cpp-chat
+  namespace: llama-cpp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: llama-cpp-chat
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: llama-cpp-chat
+    spec:
+      containers:
+        - name: llama-server
+          image: velesha-chat-sidecar:qwen2.5-3b
+          imagePullPolicy: IfNotPresent
+          # --parallel 1: llama-server's default (4) splits the -c 8192
+          # context into 4x 2048-token slots, so any single request over
+          # ~2048 tokens fails with "failed to find free space in the KV
+          # cache". Single-user workload here, so give it all 8192.
+          args: ["--parallel", "1"]
+          ports:
+            - containerPort: 8082
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+            limits:
+              cpu: "3"
+              memory: 3Gi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8082
+            initialDelaySeconds: 3
+            periodSeconds: 3
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8082
+            initialDelaySeconds: 15
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llama-cpp-chat
+  namespace: llama-cpp
+spec:
+  selector:
+    app.kubernetes.io/name: llama-cpp-chat
+  ports:
+    - port: 8082
+      targetPort: 8082
+---
+# llama-server doesn't check the API key, but ModelConfig requires
+# apiKeySecret regardless -- reusing kagent-openai (its placeholder is
+# never read).
+apiVersion: kagent.dev/v1alpha2
+kind: ModelConfig
+metadata:
+  name: local-chat-model
+  namespace: kagent
+spec:
+  provider: OpenAI
+  model: qwen2.5-3b-instruct
+  apiKeySecret: kagent-openai
+  apiKeySecretKey: OPENAI_API_KEY
+  openAI:
+    baseUrl: http://llama-cpp-chat.llama-cpp.svc.cluster.local:8082/v1

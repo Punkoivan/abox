@@ -1,0 +1,78 @@
+# Registers our own xray-memory MCP server (serving the velesha snapshot we
+# built and encrypted ourselves) and a dedicated agent to exercise it, for
+# course task 2 (evaluate an agent working with the corpus).
+#
+# The RemoteMCPServer/Agent here are declarative and reconcile normally,
+# but the actual snapshot file (maps/velesha.graph.gob.gz in
+# harness-course/xray-memory-own/) is NOT: it's on the xray-memory-maps
+# PVC via a one-time `kubectl cp` through a disposable busybox pod --
+# see harness-course/docs/adr/0005-own-agentic-memory-corpus.md for why
+# (RWO PVC, chart's own maps crash-loop the pod before you can exec in).
+# Recreating the cluster loses that PVC and needs the copy step redone.
+#
+# xray-memory-snapshot-key (age identity secret, our own key, not
+# den-vasyliev's) is likewise cluster state, not declared here -- same
+# reasoning
+# as chat-model/qdrant-mcp-official: this is course-lab exploration, not a
+# GitOps-managed part of the cluster.
+apiVersion: kagent.dev/v1alpha2
+kind: RemoteMCPServer
+metadata:
+  name: xray-memory
+  namespace: kagent
+spec:
+  description: "xray-memory -- code graph + semantic memory for the velesha repo (our own corpus, age-encrypted). search_graph, search_graph_docs, get_graph_node, get_graph_impact, get_graph_risk, get_graph_stats, recall, remember."
+  url: http://xray-memory.xray-memory.svc.cluster.local:8085/mcp
+  protocol: STREAMABLE_HTTP
+---
+apiVersion: kagent.dev/v1alpha2
+kind: Agent
+metadata:
+  name: xray-agent
+  namespace: kagent
+spec:
+  type: Declarative
+  description: Answers questions about the velesha codebase using xray-memory's code graph.
+  declarative:
+    modelConfig: local-chat-model
+    stream: true
+    systemMessage: |
+      You are a code-memory agent for a single project, "velesha", served by
+      xray-memory over its own tools. You do not read files or run shell
+      commands -- every answer comes from the graph.
+
+      Tools and when to use them:
+      - search_graph: find code/config by meaning ("where is X implemented").
+      - search_graph_docs: find documentation prose by meaning ("why was X
+        done this way" -- ADRs, READMEs).
+      - get_graph_node: full content of one node plus its relations (calls,
+        called_by, imports), once search gave you a qn to look up.
+      - get_graph_impact: blast radius of changing a symbol.
+      - get_graph_risk: LOW/MEDIUM/HIGH risk triage for changing one symbol.
+      - get_graph_stats: node/edge counts, languages -- use for "how big is
+        this codebase" type questions, not for content questions.
+      - recall: your own past notes, if asked what was discussed before.
+      - remember: write one note when explicitly asked to remember something.
+
+      Pick the tool by the shape of the question, not by habit: content
+      questions start with search_graph or search_graph_docs; "who calls
+      this" or "what breaks if" questions go straight to get_graph_impact or
+      get_graph_risk, not search first. Cite the file/qn a fact came from.
+
+      Do not guess at code you have not retrieved. If the graph has nothing
+      for a question, say so plainly instead of inventing an answer.
+    tools:
+      - type: McpServer
+        mcpServer:
+          apiGroup: kagent.dev
+          kind: RemoteMCPServer
+          name: xray-memory
+          toolNames:
+            - search_graph
+            - search_graph_docs
+            - get_graph_node
+            - get_graph_impact
+            - get_graph_risk
+            - get_graph_stats
+            - recall
+            - remember

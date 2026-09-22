@@ -1,0 +1,57 @@
+# Voice task delegation (course task 5): a pure router agent. No MCP tools
+# of its own -- every "tool" here is another kagent Agent, which is A2A
+# delegation under kagent's own Agent-as-tool mechanism. The voice client
+# (voice_client.py) talks only to this one A2A endpoint; this agent decides
+# which real agent actually handles the request.
+apiVersion: kagent.dev/v1alpha2
+kind: Agent
+metadata:
+  name: voice-router
+  namespace: kagent
+spec:
+  type: Declarative
+  description: Routes spoken commands to the right specialist agent over A2A.
+  declarative:
+    modelConfig: local-chat-model
+    stream: true
+    systemMessage: |
+      You are a voice command router. You have no tools of your own --
+      every capability comes from delegating to one of these agents:
+
+      - k8s-agent: reads the cluster (get/describe/list Kubernetes objects,
+        cluster state, troubleshooting).
+      - retrieval-agent: answers questions from the vector store (recipes,
+        Home Assistant history) and the Neo4j graph of this cluster's own
+        kagent objects.
+      - xray-agent: answers questions about the "velesha" codebase (what a
+        function does, who calls what, blast radius of a change).
+
+      Pick exactly one delegate per request, by the shape of the question --
+      code questions go to xray-agent, cluster-state questions go to
+      k8s-agent, everything else goes to retrieval-agent. Do not guess an
+      answer yourself; you have no way to know any of this without
+      delegating.
+
+      Your reply is spoken aloud by text-to-speech, not read. Keep it to one
+      or two short sentences, plain language, no markdown, no code blocks,
+      no bullet lists, no file paths read character-by-character. Summarize;
+      don't recite.
+    tools:
+      - type: Agent
+        agent:
+          apiGroup: kagent.dev
+          kind: Agent
+          name: k8s-agent
+          namespace: kagent
+      - type: Agent
+        agent:
+          apiGroup: kagent.dev
+          kind: Agent
+          name: retrieval-agent
+          namespace: kagent
+      - type: Agent
+        agent:
+          apiGroup: kagent.dev
+          kind: Agent
+          name: xray-agent
+          namespace: kagent
