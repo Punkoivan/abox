@@ -19,7 +19,9 @@ variable "kubeconfig_path" {
 variable "oci_registry" {
   description = "OCI registry base URL"
   type        = string
-  default     = "oci://ghcr.io/den-vasyliev/abox"
+  # This fork's own registry: its CI publishes releases-<branch> here, and
+  # ghcr paths are lowercase even though the GitHub owner is "Punkoivan".
+  default     = "oci://ghcr.io/punkoivan/abox"
 }
 
 variable "releases_artifact" {

@@ -1,0 +1,62 @@
+# Creates the MLflow experiments the bridge collector routes into
+# (releases/mlflow-otel-collector.yaml) -- by name, in a fixed order, and then
+# checks each got the numeric id the collector's x-mlflow-experiment-id
+# headers hardcode.
+#
+# Why this exists: MLflow's OTLP endpoint takes an experiment *id*, and those
+# ids only existed because the experiments were once created by hand. On a
+# fresh MLflow there is just "0 Default", every bridge export gets a 404
+# (RESOURCE_DOES_NOT_EXIST from get_experiment), and the otlp_http exporter
+# treats that as permanent: the traces are dropped without a retry and nothing
+# anywhere alerts. Observed on a fresh cluster: 814 drops in 30 minutes, an
+# empty trace store, and a demo that looked healthy.
+#
+# Fails loudly (Job error, visible on the releases Kustomization's health
+# check) if an existing experiment holds a different id than expected --
+# that's a routing change to make in the collector, not something to paper over.
+#
+# kustomize.toolkit.fluxcd.io/force: Job specs are immutable, so a changed Job
+# is recreated rather than failing the apply. Idempotent, so reruns are safe.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mlflow-experiments
+  namespace: mlflow
+  annotations:
+    kustomize.toolkit.fluxcd.io/force: enabled
+spec:
+  backoffLimit: 20
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: ensure
+          image: curlimages/curl:8.11.0
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              API=http://mlflow-mlflow.mlflow.svc.cluster.local:5000/api/2.0/mlflow
+              until curl -fsS "${API%/api/2.0/mlflow}/health" >/dev/null; do sleep 5; done
+              # name:expected-id, in creation order. Ids are assigned
+              # sequentially, so on a fresh store this order yields exactly these.
+              for pair in scratch:1 triage-core:2 otel-demo:3; do
+                name=${pair%%:*}; want=${pair##*:}
+                id=$(curl -fsS "$API/experiments/get-by-name?experiment_name=$name" 2>/dev/null \
+                     | sed -n 's/.*"experiment_id": *"\([0-9]*\)".*/\1/p' || true)
+                if [ -z "$id" ]; then
+                  id=$(curl -fsS -X POST "$API/experiments/create" -H 'Content-Type: application/json' \
+                       -d "{\"name\":\"$name\"}" | sed -n 's/.*"experiment_id": *"\([0-9]*\)".*/\1/p')
+                  echo "created $name -> $id"
+                else
+                  echo "exists  $name -> $id"
+                fi
+                if [ "$id" != "$want" ]; then
+                  echo "ERROR: $name has id $id, the bridge collector routes to $want" >&2
+                  exit 1
+                fi
+              done
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {cpu: 100m, memory: 64Mi}

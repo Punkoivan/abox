@@ -13,6 +13,7 @@ resources:
   - llmd.yaml
   - mcp-servers.yaml
   - mlflow.yaml
+  - mlflow-experiments.yaml
   - mlflow-otel-collector.yaml
   - neo4j.yaml
   - opentelemetry-demo.yaml
