@@ -19,4 +19,3 @@ resources:
   - opentelemetry-demo.yaml
   - phoenix.yaml
   - qdrant.yaml
-  - xray-memory.yaml
