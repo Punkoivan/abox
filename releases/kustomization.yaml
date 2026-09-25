@@ -19,3 +19,23 @@ resources:
   - opentelemetry-demo.yaml
   - phoenix.yaml
   - qdrant.yaml
+
+# First boot pulls every image at once; on a laptop-sized KinD that pushes
+# several installs (kagent, mlflow, phoenix, opentelemetry-demo) past
+# helm-controller's 5m default, and a failed install with no remediation just
+# sits until the next 1h interval. Give every release room and retries.
+# No release sets these itself; this strategic merge would override one that
+# did, so set per-release values here instead if one ever needs to differ.
+patches:
+  - target:
+      kind: HelmRelease
+    patch: |
+      apiVersion: helm.toolkit.fluxcd.io/v2
+      kind: HelmRelease
+      metadata:
+        name: any
+      spec:
+        timeout: 15m
+        install:
+          remediation:
+            retries: 3

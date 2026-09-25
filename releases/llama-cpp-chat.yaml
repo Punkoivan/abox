@@ -10,10 +10,14 @@
 # tracing/metrics.
 #
 # --jinja: the model's own chat template, required for tool calls.
-# --parallel 2 over --ctx-size 32768 = 16k tokens per slot -- kagent's system
+# --parallel 2 over --ctx-size 24576 = 12k tokens per slot -- kagent's system
 # prompt plus tool schemas alone run several thousand. Two slots so one agent
 # delegating to another (A2A) doesn't queue behind itself, which serialised a
 # whole voice round-trip on a single slot before (harness-course ADR-0005).
+# KV cache in q8_0 (needs flash attention): at f16, Qwen3-4B's KV is ~147KB per
+# token (36 layers x 8 KV heads x 128 x K+V), so 32k context alone was ~4.8GB
+# on top of 2.5GB of weights -- OOMKilled at the 6Gi limit on first boot.
+# q8_0 halves it: 24k x ~74KB = ~1.8GB.
 # --metrics exposes /metrics (prompt/gen token rates, slot usage).
 apiVersion: apps/v1
 kind: Deployment
@@ -46,9 +50,15 @@ spec:
             - qwen3-4b-instruct
             - --jinja
             - --ctx-size
-            - "32768"
+            - "24576"
             - --parallel
             - "2"
+            - --flash-attn
+            - "on"
+            - --cache-type-k
+            - q8_0
+            - --cache-type-v
+            - q8_0
             - --metrics
           ports:
             - containerPort: 8082
@@ -78,7 +88,7 @@ spec:
           resources:
             requests:
               cpu: "2"
-              memory: 4Gi
+              memory: 5Gi
             limits:
               cpu: "6"
               memory: 6Gi

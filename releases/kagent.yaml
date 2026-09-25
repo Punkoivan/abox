@@ -89,6 +89,18 @@ spec:
     # call is traced and guard-railed there. The key is agentgateway-llm's
     # "kagent" virtual key (releases/secrets/kagent-llm-key.sops.yaml), not a
     # provider key -- the model server itself takes none.
+    # Agent traces (each agent turn, LLM call and tool call, gen-ai semconv)
+    # to Phoenix -- the same OTLP receiver agentgateway-llm sends its LLM-hop
+    # spans to, so an agent turn and the gateway call it makes share a trace
+    # when the traceparent header is propagated.
+    otel:
+      tracing:
+        enabled: true
+        exporter:
+          otlp:
+            endpoint: phoenix-svc.phoenix.svc.cluster.local:4317
+            protocol: grpc
+            insecure: true
     providers:
       default: openAI
       openAI:
