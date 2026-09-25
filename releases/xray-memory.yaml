@@ -158,9 +158,8 @@ spec:
         # HuggingFace at pod start, which matters on Codespaces where egress is
         # broken until `make fix-egress` runs.
         #
-        # amd64 ONLY -- a single manifest, not an index. It will not run
-        # natively on an arm64 node.
-        image: ghcr.io/den-vasyliev/abox/nomic-embed:v1.18.1-4ccc0ff
+        # Multi-arch f16 build from this fork (see llama-cpp-embeddings.yaml).
+        image: ghcr.io/punkoivan/abox/nomic-embed:v1.5-f16-b10920
         # port, modelPath, extraArgs (--ctx-size 16384 --ubatch-size 2048
         # --parallel 8), the 60s startup budget and the resources are all left
         # at the chart defaults: they are the same production embedder sidecar

@@ -1,17 +1,18 @@
-# Builds the baked nomic-embed-text-v1.5 llama.cpp image and pushes it to GHCR.
+# Builds the weights-only Qwen3-4B-Instruct-2507 image (images/qwen3-4b) and
+# pushes it to GHCR.
 #
 # Deliberately NOT tied to the v* tags that flux-push.yaml uses: that workflow
 # publishes ./releases as an OCI artifact on every release, and this image
 # changes only when the Dockerfile or the pinned model/llama.cpp version does.
-# Rebuilding a 274MB image on every release tag would be waste.
-name: Build nomic-embed image
+# Rebuilding a 2.5GB image on every release tag would be waste.
+name: Build qwen3-4b image
 
 on:
   push:
     branches: [main, feat/otel-demo]
     paths:
-      - 'images/nomic-embed/**'
-      - '.github/workflows/nomic-embed-image.yaml'
+      - 'images/qwen3-4b/**'
+      - '.github/workflows/qwen3-4b-image.yaml'
   # So the image can be built from a feature branch before it is merged --
   # which is how it gets published the first time.
   workflow_dispatch:
@@ -28,7 +29,7 @@ jobs:
       - name: Lowercase image path
         # ghcr.io rejects uppercase; github.repository keeps the owner's case
         # (Punkoivan/abox), so derive the path once, lowercased.
-        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}/nomic-embed" >> "$GITHUB_ENV"
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}/qwen3-4b-instruct" >> "$GITHUB_ENV"
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -52,7 +53,7 @@ jobs:
         id: build
         uses: docker/build-push-action@v6
         with:
-          context: images/nomic-embed
+          context: images/qwen3-4b
           # Codespaces and CI are amd64; a dev Mac is arm64.
           platforms: linux/amd64,linux/arm64
           push: true
@@ -60,15 +61,15 @@ jobs:
           # llama.cpp server build. Bump it when either moves -- do not mutate a
           # published tag, since the Deployment pins this by tag.
           tags: |
-            ${{ env.IMAGE }}:v1.5-f16-b10920
+            ${{ env.IMAGE }}:2507-q4km
             ${{ env.IMAGE }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Summary
         run: |
-          echo "### nomic-embed image pushed" >> $GITHUB_STEP_SUMMARY
+          echo "### qwen3-4b image pushed" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "${{ env.IMAGE }}:v1.5-f16-b10920" >> $GITHUB_STEP_SUMMARY
+          echo "${{ env.IMAGE }}:2507-q4km" >> $GITHUB_STEP_SUMMARY
           echo "digest: ${{ steps.build.outputs.digest }}" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY

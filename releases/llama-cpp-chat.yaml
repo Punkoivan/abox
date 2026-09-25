@@ -1,0 +1,103 @@
+# Local chat model -- Qwen3-4B-Instruct-2507 on the stock llama.cpp server,
+# weights mounted from images/qwen3-4b as an image volume (KEP-4639, same as
+# llmd.yaml's model). OpenAI-compatible at
+#
+#   http://llama-cpp-chat.llama-cpp:8082/v1
+#
+# Stands in for the hosted LLM (Gemini) while there is no key: kagent agents
+# reach it through agentgateway-llm (releases/agentgateway-llm.yaml), not
+# directly, so every agent LLM call crosses the gateway and gets its
+# tracing/metrics.
+#
+# --jinja: the model's own chat template, required for tool calls.
+# --parallel 2 over --ctx-size 32768 = 16k tokens per slot -- kagent's system
+# prompt plus tool schemas alone run several thousand. Two slots so one agent
+# delegating to another (A2A) doesn't queue behind itself, which serialised a
+# whole voice round-trip on a single slot before (harness-course ADR-0005).
+# --metrics exposes /metrics (prompt/gen token rates, slot usage).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llama-cpp-chat
+  namespace: llama-cpp
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate   # two copies of a 2.5GB model don't fit next to each other
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: llama-cpp-chat
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: llama-cpp-chat
+    spec:
+      containers:
+        - name: llama-server
+          image: ghcr.io/ggml-org/llama.cpp:server-b10920
+          args:
+            - --host
+            - 0.0.0.0
+            - --port
+            - "8082"
+            - --model
+            - /weights/models/model.gguf
+            - --alias
+            - qwen3-4b-instruct
+            - --jinja
+            - --ctx-size
+            - "32768"
+            - --parallel
+            - "2"
+            - --metrics
+          ports:
+            - containerPort: 8082
+              name: http
+          volumeMounts:
+            # An image volume mounts the image rootfs, so the file lands at
+            # <mountPath>/models/model.gguf.
+            - name: model
+              mountPath: /weights
+              readOnly: true
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8082
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8082
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8082
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: "2"
+              memory: 4Gi
+            limits:
+              cpu: "6"
+              memory: 6Gi
+      volumes:
+        - name: model
+          image:
+            reference: ghcr.io/punkoivan/abox/qwen3-4b-instruct:2507-q4km
+            pullPolicy: IfNotPresent
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llama-cpp-chat
+  namespace: llama-cpp
+spec:
+  selector:
+    app.kubernetes.io/name: llama-cpp-chat
+  ports:
+    - name: http
+      port: 8082
+      targetPort: 8082
+      protocol: TCP

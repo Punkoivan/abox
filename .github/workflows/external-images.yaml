@@ -1,0 +1,87 @@
+# Multi-arch (amd64 + arm64) rebuilds of upstream images that are published
+# amd64-only, pushed under this repo's own GHCR namespace. Without them the
+# pods exec-format-error on arm64 nodes (a KinD cluster on Apple Silicon).
+#
+#   epp                     registry.k8s.io/gateway-api-inference-extension/epp
+#                           -- every tag is a single amd64 manifest; its
+#                           Dockerfile pins ENV GOARCH=amd64, so that line is
+#                           swapped for buildx's TARGETARCH before building.
+#   agentregistry-inventory ghcr.io/den-vasyliev/agentregistry-inventory
+#                           -- built with ko, which cross-compiles natively.
+#
+# Manual only: these follow the upstream tags pinned in releases/, not this
+# repo's release cadence. Bump the version inputs' defaults together with the
+# references in releases/llmd.yaml and releases/agentregistry.yaml.
+name: Build external images
+on:
+  workflow_dispatch:
+    inputs:
+      epp_version:
+        description: gateway-api-inference-extension tag
+        default: v1.5.0
+      agentregistry_version:
+        description: agentregistry-inventory tag
+        default: v0.5.18
+
+jobs:
+  epp:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Lowercase image path
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}/epp" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+        with:
+          repository: kubernetes-sigs/gateway-api-inference-extension
+          ref: ${{ inputs.epp_version }}
+      - name: Let buildx pick GOARCH
+        run: |
+          grep -q '^ENV GOARCH=amd64$' Dockerfile
+          sed -i 's/^ENV GOARCH=amd64$/ARG TARGETARCH\nENV GOARCH=${TARGETARCH}/' Dockerfile
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: |
+            COMMIT_SHA=${{ inputs.epp_version }}
+            BUILD_REF=${{ inputs.epp_version }}
+          tags: ${{ env.IMAGE }}:${{ inputs.epp_version }}
+
+  agentregistry-inventory:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Lowercase image path
+        run: echo "KO_DOCKER_REPO=ghcr.io/${GITHUB_REPOSITORY,,}/agentregistry-inventory" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+        with:
+          repository: den-vasyliev/agentregistry-inventory
+          ref: ${{ inputs.agentregistry_version }}
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.9.x
+      - name: Embed the UI
+        run: make prepare-ui-embed
+      - uses: ko-build/setup-ko@v0.9
+      - name: ko build
+        env:
+          VERSION: ${{ inputs.agentregistry_version }}
+        run: |
+          ko build ./cmd/controller --bare \
+            --platform=linux/amd64,linux/arm64 \
+            --tags="${VERSION#v}"

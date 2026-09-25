@@ -4,10 +4,10 @@
 # read-only; this one runs from a local file, and a save in the UI writes the
 # file and hot-reloads it.
 #
-# The file lives on a PVC. The seed ConfigMap is copied only when the file is
-# missing, so Flux never overwrites what was saved in the UI -- bumping this
-# seed alone does not reach an already-seeded pod; the PVC has to be deleted
-# (and the pod restarted) to force a reseed.
+# The file lives on a PVC, seeded from the ConfigMap below by an init
+# container: on an empty claim, and again whenever the seed in git changes
+# (tracked by its md5 on the claim). A UI save survives restarts, but the next
+# seed change in git replaces it.
 #
 # The admin port (15000) has no auth and can rewrite the config, including
 # provider keys. Reach it with port-forward only; never route it:
@@ -16,69 +16,28 @@
 #
 # LLM traffic: http://agentgateway-llm.agentgateway-system.svc.cluster.local
 # (Service port 80 -> gateways.default on 8080, OpenAI-compatible paths, e.g.
-# POST /v1/chat/completions with `Authorization: Bearer <TRIAGE_LLM_KEY>`).
-# `gateways: default: {port: 8080}` replaces the old `binds: []` stub --
-# `binds` is the deprecated raw-config field; the simplified `llm:` section
-# below attaches to the gateway named "default" implicitly, and omitting a
-# `gateways:` block entirely (as this file did before) leaves agentgateway's
-# own built-in default of port 4000, not this Service's 8080.
+# POST /v1/chat/completions with `Authorization: Bearer <KAGENT_LLM_KEY>`).
+# `gateways: default: {port: 8080}` is what the `llm:` section attaches to;
+# without it agentgateway listens on its built-in 4000, not this Service's 8080.
 #
-# config.database is what the Costs/Analytics/Logs pages in the UI need --
-# without it those pages have nothing to read and stay empty, which is why a
-# fresh install shows a short menu with whole LLM sections looking hidden.
-# SQLite on the same PVC the config file already lives on, so no second
-# volume.
+# config.database backs the Costs/Analytics/Logs pages in the UI (SQLite on the
+# same PVC).
 #
-# Gemini 2.5 Flash text only -- Gemini's native-audio Live API is a stateful
-# WebSocket protocol agentgateway has no backend type for (it proxies exactly
-# one realtime WS protocol today, OpenAI Realtime; there is no Gemini-Live
-# equivalent), so voice bypasses this gateway entirely and goes straight from
-# triage-core to Gemini. GEMINI_API_KEY is a container env var (Secret, out of
-# band, same convention as every other credential in this repo):
+# Upstream: the in-cluster Qwen3-4B (releases/llama-cpp-chat.yaml) -- there is
+# no hosted-LLM key in this fork. Callers: kagent's default-model-config
+# (releases/kagent.yaml), i.e. every declarative agent.
 #
-#   kubectl -n agentgateway-system create secret generic agentgateway-llm-secrets \
-#     --from-literal=GEMINI_API_KEY=<gemini api key> \
-#     --from-literal=TRIAGE_LLM_KEY=<random bearer token for the triage virtual key>
-#
-# llm.policies.apiKey.mode: strict means every LLM request needs
-# `Authorization: Bearer <TRIAGE_LLM_KEY>` -- that Bearer token IS the
-# "triage" tenant identity ag-llm's budget/allowedModels/metrics all key off,
-# so it is never written into this file in plaintext (unlike GEMINI_API_KEY,
-# it isn't a provider secret agentgateway calls out with -- it is the
-# credential callers present TO this gateway, so it has to be a real value a
-# caller can be given, not something agentgateway resolves itself; the only
-# way to keep it out of git is the same $ENV substitution agentgateway
-# already does for params.apiKey).
-#
-# config.modelCatalog prices gemini-2.5-flash (USD per 1M tokens, checked
-# against ai.google.dev/gemini-api/docs/pricing -- $0.30 in / $2.50 out /
-# $0.03 cached-read / $1.00 audio-in) so the USD budget below and the
-# Costs/Analytics pages have real numbers instead of token counts alone.
-# `gcp.gemini` is the catalog's provider id for the Gemini API, not a values
-# choice -- see agentgateway's own worked example under Model costs.
+# llm.policies.apiKey.mode: strict -- every request needs the "kagent" virtual
+# key. It is the identity allowedModels/metrics key off, so it comes from the
+# environment ($KAGENT_LLM_KEY, SOPS Secret agentgateway-llm-secrets), never
+# from this file. The same value sits in kagent/kagent-llm-key for the caller;
+# scripts/seal-secrets.sh llm writes both.
 #
 # frontendPolicies.tracing sends every request/response span (HTTP + LLM,
-# OpenTelemetry gen-ai semconv) to Phoenix's OTLP gRPC receiver in-cluster --
-# plaintext, no auth, matching how phoenix-svc is otherwise only reachable
-# from inside the cluster. This traces ag-llm's own proxy hop; it says
-# nothing about whether triage-core's own LLM calls reach Phoenix (they
-# don't yet -- see releases/triage-core.yaml's otelTracing block).
-# triage-core routes through this gateway: releases/triage-core.yaml sets
-# runtimeConfig.models.main.baseURL here and names the Secret holding
-# TRIAGE_LLM_KEY in models.main.apiKeySecretRef.
+# OpenTelemetry gen-ai semconv) to Phoenix's OTLP gRPC receiver in-cluster.
 #
-# llm.policies.guardrails is regex-only: built-in PII detectors (mask, so a
-# false positive degrades rather than breaks the request) plus the same
-# injection/jailbreak phrase list triage-core's own event guardrail already
-# checks (internal/core/guardrail.go's roleHijackPatterns et al, ported here
-# as a second, independent layer against LLM traffic specifically -- reject,
-# not mask, since there is no safe redaction of a whole hijack attempt).
-# Needs no external service/credentials beyond what is already here, unlike
-# openAIModeration/bedrockGuardrails/googleModelArmor.
-#
-# The triage-daily-spend budget ($5/day) is a starting guardrail, not a
-# measured number -- raise it in the UI (LLM > Virtual API Keys) or here if
-# it is too tight.
+# llm.policies.guardrails is regex-only: built-in PII detectors (mask) plus a
+# prompt-injection/jailbreak phrase list (reject). No external service needed.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -93,14 +52,14 @@ data:
       modelCatalog:
       - inline:
           providers:
-            gcp.gemini:
+            openai:
               models:
-                gemini-2.5-flash:
+                # Local model: no per-token cost, listed so cost/usage
+                # telemetry resolves to a known model instead of "unknown".
+                qwen3-4b-instruct:
                   rates:
-                    input: "0.30"
-                    output: "2.50"
-                    cacheRead: "0.03"
-                    inputAudio: "1.00"
+                    input: "0"
+                    output: "0"
 
     gateways:
       default:
@@ -116,19 +75,11 @@ data:
         apiKey:
           mode: strict
           keys:
-          - key: "$TRIAGE_LLM_KEY"
+          - key: "$KAGENT_LLM_KEY"
             metadata:
-              name: triage
+              name: kagent
             allowedModels:
-            - gemini-2.5-flash
-            budgets:
-            - name: triage-daily-spend
-              limit:
-                unit: USD
-                amount: 5
-              window:
-                rolling: 24h
-              onBudgetExceeded: Block
+            - qwen3-4b-instruct
         guardrails:
           request:
           - regex:
@@ -154,11 +105,13 @@ data:
               - pattern: '(?i)do\s+anything\s+now'
               - pattern: '(?i)jailbreak'
       models:
-      - name: gemini-2.5-flash
-        provider: gemini
+      - name: qwen3-4b-instruct
+        provider: openAI
         params:
-          model: gemini-2.5-flash
-          apiKey: "$GEMINI_API_KEY"
+          model: qwen3-4b-instruct
+          baseUrl: http://llama-cpp-chat.llama-cpp.svc.cluster.local:8082/v1
+          # llama-server checks no key; set so nothing is picked up from env.
+          apiKey: "unused"
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -196,7 +149,18 @@ spec:
       initContainers:
         - name: seed
           image: busybox:1.36
-          command: ["sh", "-c", "[ -s /config/config.yaml ] || cp /seed/config.yaml /config/config.yaml"]
+          # Re-seed when the seed in git changes, not only on an empty claim:
+          # "copy once" left a changed ConfigMap silently unapplied behind the
+          # first config ever written. UI edits survive until the next seed
+          # change -- git wins then.
+          command:
+            - sh
+            - -c
+            - |
+              new=$(md5sum /seed/config.yaml | cut -d' ' -f1)
+              if [ ! -s /config/config.yaml ] || [ "$(cat /config/.seed-md5 2>/dev/null)" != "$new" ]; then
+                cp /seed/config.yaml /config/config.yaml && echo "$new" > /config/.seed-md5
+              fi
           volumeMounts:
             - {name: config, mountPath: /config}
             - {name: seed, mountPath: /seed}
@@ -208,16 +172,11 @@ spec:
             - {name: llm, containerPort: 8080}
             - {name: admin, containerPort: 15000}
           env:
-            - name: GEMINI_API_KEY
+            - name: KAGENT_LLM_KEY
               valueFrom:
                 secretKeyRef:
                   name: agentgateway-llm-secrets
-                  key: GEMINI_API_KEY
-            - name: TRIAGE_LLM_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: agentgateway-llm-secrets
-                  key: TRIAGE_LLM_KEY
+                  key: KAGENT_LLM_KEY
           volumeMounts:
             - {name: config, mountPath: /config}
       volumes:

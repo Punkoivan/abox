@@ -44,10 +44,10 @@ spec:
           #
           # Two properties of this specific image that matter:
           #
-          #   amd64 ONLY -- it is a single manifest, not an index. Fine on
-          #   Codespaces and any x86 node; it will NOT run natively on an arm64
-          #   Mac. images/nomic-embed/Dockerfile builds a multi-arch f16
-          #   equivalent if that is needed.
+          #   Multi-arch (amd64 + arm64), f16 -- this fork's build of
+          #   images/nomic-embed/. The earlier ghcr.io/den-vasyliev one was an
+          #   amd64-only quantized GGUF; f16 moves the vectors slightly, so
+          #   don't mix output from the two in one collection.
           #
           #   Its baked CMD is only --host/--port/--embeddings/--model. The
           #   --ctx-size, --ubatch-size and --parallel below are NOT defaults --
@@ -58,7 +58,7 @@ spec:
           # f16. That matches the deployment it was copied from, which is what
           # makes its vectors comparable with the cells that deployment
           # embedded.
-          image: ghcr.io/den-vasyliev/abox/nomic-embed:v1.18.1-4ccc0ff
+          image: ghcr.io/punkoivan/abox/nomic-embed:v1.5-f16-b10920
           # No command: -- the upstream ENTRYPOINT is the llama-server binary
           # and its path varies between image variants.
           args:

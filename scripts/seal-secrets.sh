@@ -6,8 +6,8 @@
 #   bash scripts/seal-secrets.sh            # (re)seal all of them
 #   bash scripts/seal-secrets.sh gemini     # only the ones named
 #
-# Asks for the two values that can't be generated (Gemini key, ghcr token);
-# the bearer tokens and the xray snapshot identity are random.
+# Asks only for the ghcr token; the bearer tokens, the LLM virtual key and the
+# xray snapshot identity are random.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 OUT=releases/secrets
@@ -34,16 +34,15 @@ if want ghcr; then
   unset GHCR_TOKEN
 fi
 
-if want gemini; then
-  read -r -s -p "GEMINI_API_KEY: " GEMINI_API_KEY; echo
-  kc secret generic triage-gemini-key -n triage \
-    --from-literal=GEMINI_API_KEY="$GEMINI_API_KEY" | seal triage-gemini-key
-  # TRIAGE_LLM_KEY is the bearer triage-core presents to agentgateway-llm's
-  # triage virtual key -- any random value, as long as both sides agree.
+if want llm; then
+  # agentgateway-llm's "kagent" virtual key, and the same value for kagent's
+  # default-model-config to present. Random -- only these two sides use it.
+  KAGENT_LLM_KEY=$(openssl rand -hex 32)
   kc secret generic agentgateway-llm-secrets -n agentgateway-system \
-    --from-literal=GEMINI_API_KEY="$GEMINI_API_KEY" \
-    --from-literal=TRIAGE_LLM_KEY="$(openssl rand -hex 32)" | seal agentgateway-llm-secrets
-  unset GEMINI_API_KEY
+    --from-literal=KAGENT_LLM_KEY="$KAGENT_LLM_KEY" | seal agentgateway-llm-secrets
+  kc secret generic kagent-llm-key -n kagent \
+    --from-literal=OPENAI_API_KEY="$KAGENT_LLM_KEY" | seal kagent-llm-key
+  unset KAGENT_LLM_KEY
 fi
 
 if want xray; then

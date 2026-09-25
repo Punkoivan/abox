@@ -30,5 +30,8 @@ spec:
     createNamespace: true
   values:
     image:
+      # Multi-arch rebuild (.github/workflows/external-images.yaml): upstream
+      # publishes this tag amd64-only.
+      repository: ghcr.io/punkoivan/abox/agentregistry-inventory
       tag: "0.5.18"
     disableAuth: true

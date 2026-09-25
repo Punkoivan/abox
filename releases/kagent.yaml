@@ -84,10 +84,20 @@ spec:
       enabled: false
     cilium-debug-agent:
       enabled: false
+    # default-model-config: the local Qwen3-4B (releases/llama-cpp-chat.yaml),
+    # reached through agentgateway-llm rather than directly, so every agent LLM
+    # call is traced and guard-railed there. The key is agentgateway-llm's
+    # "kagent" virtual key (releases/secrets/kagent-llm-key.sops.yaml), not a
+    # provider key -- the model server itself takes none.
     providers:
       default: openAI
       openAI:
-        apiKey: OPENAI_API_KEY
+        provider: OpenAI
+        model: qwen3-4b-instruct
+        apiKeySecretRef: kagent-llm-key
+        apiKeySecretKey: OPENAI_API_KEY
+        config:
+          baseUrl: http://agentgateway-llm.agentgateway-system.svc.cluster.local/v1
 ---
 apiVersion: gateway.networking.k8s.io/v1beta1
 kind: ReferenceGrant

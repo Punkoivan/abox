@@ -23,6 +23,8 @@ ARG LLAMA_IMAGE=ghcr.io/ggml-org/llama.cpp:server-b10920
 # a 274MB curl through the emulator and OOMs small builder VMs. Only the runtime
 # stage below is built per-arch.
 FROM --platform=$BUILDPLATFORM curlimages/curl:8.11.0 AS fetch
+# curlimages/curl runs as curl_user, which can't write the root-owned WORKDIR.
+USER root
 
 # f16, not one of the Q* quants. Quantization perturbs the embedding vectors,
 # and the point of this image is to land in the same vector space as the vLLM

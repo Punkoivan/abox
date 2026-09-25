@@ -7,14 +7,12 @@ on:
   push:
     # This branch ships by v* tag and is never merged, so main would never
     # build its image.
-    branches: [main, feat/llmd-embeddings]
+    branches: [main, feat/otel-demo]
     paths:
       - 'mcp/qdrant-mcp/**'
       - '.github/workflows/qdrant-mcp-image.yaml'
   workflow_dispatch:
 
-env:
-  IMAGE: ghcr.io/${{ github.repository }}/qdrant-mcp
 
 jobs:
   build:
@@ -24,6 +22,10 @@ jobs:
       packages: write
 
     steps:
+      - name: Lowercase image path
+        # ghcr.io rejects uppercase; github.repository keeps the owner's case
+        # (Punkoivan/abox), so derive the path once, lowercased.
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}/qdrant-mcp" >> "$GITHUB_ENV"
       - name: Checkout
         uses: actions/checkout@v4
 

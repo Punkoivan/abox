@@ -7,8 +7,8 @@ resources:
   - agentgateway-llm.yaml
   - agentregistry.yaml
   - agent-retrieval.yaml
-  - graph-otel-demo.yaml
   - kagent.yaml
+  - llama-cpp-chat.yaml
   - llama-cpp-embeddings.yaml
   - llmd.yaml
   - mcp-servers.yaml
@@ -16,10 +16,6 @@ resources:
   - mlflow-otel-collector.yaml
   - neo4j.yaml
   - opentelemetry-demo.yaml
-  - pages-triage.yaml
   - phoenix.yaml
   - qdrant.yaml
-  - triage.yaml
-  - triage-agent.yaml
-  - triage-core.yaml
   - xray-memory.yaml
