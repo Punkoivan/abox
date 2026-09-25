@@ -32,6 +32,21 @@ spec:
     # The cluster routes through the agentgateway Gateway, not an Ingress.
     ingress:
       enabled: false
+    # The chart turns auth on by default (auth.enableAuth: true), and with it
+    # Phoenix rejects every unauthenticated OTLP export -- kagent got
+    # "rpc error: code = Unauthenticated", agentgateway-llm a
+    # BatchSpanProcessor.ExportError, and Phoenix stored 0 spans while both
+    # looked configured. Ingestion only takes API keys created in the running
+    # Phoenix (not PHOENIX_ADMIN_SECRET -- that got a 401 too), so there is no
+    # declarative way to hand one to the exporters.
+    #
+    # Off instead, matching how every exporter here is already written
+    # (plaintext, in-cluster). The trade-off: anything that can reach
+    # phoenix-svc can read and write traces. It has no LoadBalancer and no
+    # route, so that means in-cluster pods and port-forward only. Revisit if
+    # Phoenix is ever exposed.
+    auth:
+      enableAuth: false
     # The chart's startup probe allows 31s (periodSeconds 1 x failureThreshold
     # 30). Phoenix runs Alembic migrations against Postgres on first boot, which
     # takes longer than that on KinD, so the probe kills the container before it
