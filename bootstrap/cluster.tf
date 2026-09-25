@@ -18,7 +18,10 @@ resource "local_file" "kind_config" {
     kind: Cluster
     apiVersion: kind.x-k8s.io/v1alpha4
     networking:
-      kubeProxyMode: ipvs
+      # iptables, not ipvs: rootless Docker (lima's default docker template)
+      # denies IPVS netlink to the node containers, so kube-proxy crash-loops
+      # with "can't use the IPVS proxier: operation not permitted".
+      kubeProxyMode: iptables
     nodes:
       - role: control-plane
       - role: worker
