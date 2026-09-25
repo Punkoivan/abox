@@ -87,10 +87,17 @@ jobs:
       - name: Embed the UI
         run: make prepare-ui-embed
       - uses: ko-build/setup-ko@v0.9
+      # setup-ko's own ghcr login only covers its default KO_DOCKER_REPO;
+      # with the lowercased one set above the push was DENIED without this.
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: ko build
         env:
           VERSION: ${{ env.AGENTREGISTRY_VERSION }}
         run: |
-          ko build ./cmd/controller --bare \
+          ko build ./cmd/controller --bare --sbom=none \
             --platform=linux/amd64,linux/arm64 \
             --tags="${VERSION#v}"
