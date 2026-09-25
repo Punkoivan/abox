@@ -9,11 +9,16 @@
 #   agentregistry-inventory ghcr.io/den-vasyliev/agentregistry-inventory
 #                           -- built with ko, which cross-compiles natively.
 #
-# Manual only: these follow the upstream tags pinned in releases/, not this
-# repo's release cadence. Bump the version inputs' defaults together with the
-# references in releases/llmd.yaml and releases/agentregistry.yaml.
+# Not tied to release tags: these follow the upstream tags pinned in
+# releases/. Runs when this file changes (bump the versions below together
+# with the references in releases/llmd.yaml and releases/agentregistry.yaml),
+# or by hand. The push trigger is also what makes a first run possible from a
+# branch -- workflow_dispatch only works once the file is on the default branch.
 name: Build external images
 on:
+  push:
+    paths:
+      - '.github/workflows/external-images.yaml'
   workflow_dispatch:
     inputs:
       epp_version:
@@ -22,6 +27,10 @@ on:
       agentregistry_version:
         description: agentregistry-inventory tag
         default: v0.5.18
+
+env:
+  EPP_VERSION: ${{ inputs.epp_version || 'v1.5.0' }}
+  AGENTREGISTRY_VERSION: ${{ inputs.agentregistry_version || 'v0.5.18' }}
 
 jobs:
   epp:
@@ -35,7 +44,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: kubernetes-sigs/gateway-api-inference-extension
-          ref: ${{ inputs.epp_version }}
+          ref: ${{ env.EPP_VERSION }}
       - name: Let buildx pick GOARCH
         run: |
           grep -q '^ENV GOARCH=amd64$' Dockerfile
@@ -53,9 +62,9 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           build-args: |
-            COMMIT_SHA=${{ inputs.epp_version }}
-            BUILD_REF=${{ inputs.epp_version }}
-          tags: ${{ env.IMAGE }}:${{ inputs.epp_version }}
+            COMMIT_SHA=${{ env.EPP_VERSION }}
+            BUILD_REF=${{ env.EPP_VERSION }}
+          tags: ${{ env.IMAGE }}:${{ env.EPP_VERSION }}
 
   agentregistry-inventory:
     runs-on: ubuntu-latest
@@ -68,7 +77,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: den-vasyliev/agentregistry-inventory
-          ref: ${{ inputs.agentregistry_version }}
+          ref: ${{ env.AGENTREGISTRY_VERSION }}
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
@@ -80,7 +89,7 @@ jobs:
       - uses: ko-build/setup-ko@v0.9
       - name: ko build
         env:
-          VERSION: ${{ inputs.agentregistry_version }}
+          VERSION: ${{ env.AGENTREGISTRY_VERSION }}
         run: |
           ko build ./cmd/controller --bare \
             --platform=linux/amd64,linux/arm64 \
