@@ -22,6 +22,25 @@ module "flux_operator" {
 }
 
 # ==========================================
+# SOPS age identity for kustomize-controller
+# ==========================================
+# releases/secrets/*.sops.yaml are encrypted to this identity's public key
+# (.sops.yaml). The private half never enters the repo: it is read from the
+# bootstrapping machine and handed to Flux as flux-system/sops-age, which both
+# Kustomizations below reference in spec.decryption.
+resource "kubernetes_secret_v1" "sops_age" {
+  depends_on = [module.flux_operator]
+
+  metadata {
+    name      = "sops-age"
+    namespace = "flux-system"
+  }
+  data = {
+    "age.agekey" = file(pathexpand(var.sops_age_key_path))
+  }
+}
+
+# ==========================================
 # Bootstrap Flux ResourceSetInputProvider
 # ==========================================
 # Applied after the module because the ResourceSetInputProvider and ResourceSet
@@ -55,7 +74,7 @@ resource "kubectl_manifest" "rsip" {
 # Bootstrap Flux ResourceSet
 # ==========================================
 resource "kubectl_manifest" "rset" {
-  depends_on = [kubectl_manifest.rsip]
+  depends_on = [kubectl_manifest.rsip, kubernetes_secret_v1.sops_age]
 
   yaml_body = <<-YAML
     apiVersion: fluxcd.controlplane.io/v1
@@ -91,6 +110,10 @@ resource "kubectl_manifest" "rset" {
           path: ./crds
           prune: true
           wait: true
+          decryption:
+            provider: sops
+            secretRef:
+              name: sops-age
       - apiVersion: kustomize.toolkit.fluxcd.io/v1
         kind: Kustomization
         metadata:
@@ -107,5 +130,9 @@ resource "kubectl_manifest" "rset" {
           prune: true
           wait: true
           retryInterval: 30s
+          decryption:
+            provider: sops
+            secretRef:
+              name: sops-age
   YAML
 }

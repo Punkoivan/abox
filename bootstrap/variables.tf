@@ -58,3 +58,9 @@ variable "bootstrap_revision" {
   type        = number
   default     = 1
 }
+
+variable "sops_age_key_path" {
+  description = "age identity that decrypts releases/secrets/*.sops.yaml; copied into flux-system/sops-age"
+  type        = string
+  default     = "~/.config/sops/age/abox.agekey"
+}

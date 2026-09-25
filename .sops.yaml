@@ -1,0 +1,11 @@
+# SOPS rules for the Secrets under releases/secrets/. Only data/stringData is
+# encrypted, so kind/metadata stay readable in diffs and to kustomize.
+#
+# The matching age identity is NOT in this repo: it lives at
+# ~/.config/sops/age/abox.agekey on the machine that bootstraps the cluster,
+# and bootstrap/flux.tf copies it into flux-system/sops-age so kustomize-
+# controller can decrypt on apply.
+creation_rules:
+  - path_regex: releases/secrets/.*\.sops\.yaml$
+    encrypted_regex: ^(data|stringData)$
+    age: age1cc2g2aw4rd538g4vw8m9qy6tytkcsyzmxxgsdkvph7evdn44t37qlrdncu
