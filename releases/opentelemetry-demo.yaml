@@ -88,7 +88,8 @@ spec:
             value: "5665"
         service:
           port: 5665
-    # Bundled jaeger/prometheus/grafana/opensearch backends disabled --
+    # Bundled jaeger/prometheus/grafana backends disabled (opensearch is
+    # re-enabled below) --
     # frees ~1.7Gi mem + 1+ CPU on a constrained KinD node: jaeger alone
     # requested 600Mi, prometheus 768Mi, opensearch 1 CPU/100Mi, grafana
     # 150m/256Mi. Traces additionally consolidate into mlflow
@@ -100,8 +101,17 @@ spec:
       enabled: false
     grafana:
       enabled: false
+    # OpenSearch back on: with it disabled the logs pipeline still exported
+    # to it, and because the opensearch exporter has no sending_queue the
+    # failure went back synchronously -- the collector answered every OTLP
+    # log export with HTTP 500 ("lookup opensearch ... server misbehaving").
+    # Over 10 minutes: product-catalog 2192 such lines, load-generator (k6)
+    # 1659, currency 448, recommendation 315, kafka 193 ... plus the
+    # collector's own logs looping back into the same pipeline. Logs lost
+    # AND errors pushed back into every app. The chart's single-node default
+    # is small enough for KinD (400m heap, 1100Mi limit, no persistence).
     opensearch:
-      enabled: false
+      enabled: true
     opentelemetry-collector:
       config:
         exporters:
