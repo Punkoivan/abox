@@ -23,17 +23,21 @@
 #
 # then http://localhost:8080/ for the web store, /chatbot/, /jaeger/ui/,
 # /grafana/, /telemetry/, /feature/ -- the exact list the chart's own
-# post-install NOTES.txt prints. No /loadgen: the chart's default
-# component.load-generator.env pins LOCUST_HEADLESS: "true", unlike
-# docker-compose's LOCUST_HEADLESS=false, so upstream's screenshots of a
-# Locust UI are docker-compose-only unless overridden. Overridden here via
-# envOverrides (merged onto the chart's env by name, not a wholesale
-# replacement -- see the chart's otel-demo.envOverriden helper) plus a
-# service.port so the chart renders a Service at all (load-generator gets
-# none by default: no .service block, no .ports). Locust's own default web
-# port is 8089, unset here same as upstream, so the two line up:
+# post-install NOTES.txt prints. No /loadgen.
 #
-#   kubectl port-forward -n otel-demo svc/load-generator 8089:8089
+# The load generator in demo 3.0.0 (this chart version) is k6, not Locust --
+# entrypoint.sh runs `k6 run script.js --out opentelemetry`, restarting k6
+# whenever flagd's loadGeneratorVUs changes. The LOCUST_* env the chart still
+# renders is dead, and nothing listens on Locust's 8089 (an earlier override
+# here set LOCUST_HEADLESS=false + a Service on 8089: port-forward got
+# "connection refused"). k6's own web dashboard is turned on instead, bound
+# to all interfaces so a Service can reach it; envOverrides merge onto the
+# chart's env by name (otel-demo.envOverriden helper), and service.port makes
+# the chart render a Service at all (load-generator gets none by default).
+# The dashboard resets whenever k6 restarts on a VU-flag change.
+#
+#   kubectl port-forward -n otel-demo svc/load-generator 5665:5665
+#   open http://localhost:5665
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -76,10 +80,14 @@ spec:
     components:
       load-generator:
         envOverrides:
-          - name: LOCUST_HEADLESS
-            value: "false"
+          - name: K6_WEB_DASHBOARD
+            value: "true"
+          - name: K6_WEB_DASHBOARD_HOST
+            value: 0.0.0.0
+          - name: K6_WEB_DASHBOARD_PORT
+            value: "5665"
         service:
-          port: 8089
+          port: 5665
     # Bundled jaeger/prometheus/grafana/opensearch backends disabled --
     # frees ~1.7Gi mem + 1+ CPU on a constrained KinD node: jaeger alone
     # requested 600Mi, prometheus 768Mi, opensearch 1 CPU/100Mi, grafana
