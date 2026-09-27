@@ -74,14 +74,16 @@ spec:
         jaeger: null
         zipkin: null
         prometheus: null
+        # 0.0.0.0, not the chart's ${env:MY_POD_IP}: `kubectl port-forward`
+        # connects to the pod's localhost, which a pod-IP-only listener refuses.
         otlp:
           protocols:
             grpc:
-              endpoint: ${env:MY_POD_IP}:4317
+              endpoint: 0.0.0.0:4317
               auth:
                 authenticator: bearertokenauth/ingest
             http:
-              endpoint: ${env:MY_POD_IP}:4318
+              endpoint: 0.0.0.0:4318
               auth:
                 authenticator: bearertokenauth/ingest
       processors:
