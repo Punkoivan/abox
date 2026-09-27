@@ -1,12 +1,12 @@
 # Authenticated OTLP entry point for telemetry from OUTSIDE the cluster --
-# e.g. a self-written agent on another machine in the same LAN. The in-cluster
+# first user: velesha, a self-written agent on another machine in the LAN. The in-cluster
 # backends it fans out to (Phoenix with auth off, MLflow, OpenSearch) must
 # never be reachable from outside themselves; this collector is the one thing
 # that is, and it takes nothing without the bearer token.
 #
-#   traces -> Phoenix, project "home-agent" (openinference.project.name,
+#   traces -> Phoenix, project "velesha" (openinference.project.name,
 #             inserted only if the sender didn't set its own)
-#          -> MLflow, experiment "home-agent" (id 4, created by
+#          -> MLflow, experiment "velesha" (id 4, created by
 #             releases/mlflow-experiments.yaml; MLflow only takes OTLP/HTTP)
 #   logs   -> OpenSearch (the otel-demo one), index otel-logs-external-*
 #
@@ -90,7 +90,7 @@ spec:
         resource/phoenix-project:
           attributes:
             - key: openinference.project.name
-              value: home-agent
+              value: velesha
               action: insert
         transform/truncate:
           error_mode: ignore

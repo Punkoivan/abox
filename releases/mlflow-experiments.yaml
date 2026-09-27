@@ -41,7 +41,7 @@ spec:
               until curl -fsS "${API%/api/2.0/mlflow}/health" >/dev/null; do sleep 5; done
               # name:expected-id, in creation order. Ids are assigned
               # sequentially, so on a fresh store this order yields exactly these.
-              for pair in scratch:1 triage-core:2 otel-demo:3 home-agent:4; do
+              for pair in scratch:1 triage-core:2 otel-demo:3 velesha:4; do
                 name=${pair%%:*}; want=${pair##*:}
                 id=$(curl -fsS "$API/experiments/get-by-name?experiment_name=$name" 2>/dev/null \
                      | sed -n 's/.*"experiment_id": *"\([0-9]*\)".*/\1/p' || true)
