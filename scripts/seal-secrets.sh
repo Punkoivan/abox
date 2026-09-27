@@ -45,6 +45,14 @@ if want llm; then
   unset KAGENT_LLM_KEY
 fi
 
+if want ingest; then
+  # Bearer token external OTLP senders present to releases/otel-ingest.yaml.
+  # Not printed; read it back from the cluster when configuring a sender:
+  #   kubectl -n otel-ingest get secret otel-ingest-token -o jsonpath='{.data.token}' | base64 -d
+  kc secret generic otel-ingest-token -n otel-ingest \
+    --from-literal=token="$(openssl rand -hex 32)" | seal otel-ingest-token
+fi
+
 if want xray; then
   kc secret generic xray-memory-auth -n xray-memory \
     --from-literal=token="$(openssl rand -hex 32)" | seal xray-memory-auth

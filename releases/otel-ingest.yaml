@@ -1,0 +1,131 @@
+# Authenticated OTLP entry point for telemetry from OUTSIDE the cluster --
+# e.g. a self-written agent on another machine in the same LAN. The in-cluster
+# backends it fans out to (Phoenix with auth off, MLflow, OpenSearch) must
+# never be reachable from outside themselves; this collector is the one thing
+# that is, and it takes nothing without the bearer token.
+#
+#   traces -> Phoenix, project "home-agent" (openinference.project.name,
+#             inserted only if the sender didn't set its own)
+#          -> MLflow, experiment "home-agent" (id 4, created by
+#             releases/mlflow-experiments.yaml; MLflow only takes OTLP/HTTP)
+#   logs   -> OpenSearch (the otel-demo one), index otel-logs-external-*
+#
+# Token: Secret otel-ingest-token (SOPS, `scripts/seal-secrets.sh ingest`),
+# checked by the bearertokenauth extension on both OTLP receivers. Senders use
+#   Authorization: Bearer <token>
+#
+# Not routed or LoadBalanced. For a LAN test, from the machine running kind:
+#   kubectl -n otel-ingest port-forward --address 0.0.0.0 svc/otel-ingest 4318:4318 4317:4317
+# then OTLP/HTTP at http://<that-machine's-LAN-IP>:4318 (gRPC :4317).
+#
+# Redaction: gen_ai/tool payload attributes are truncated to 4KB here, the
+# one place every external span passes through (lab note O11: full tool
+# output lands in traces verbatim).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: otel-ingest
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: otel-ingest
+  namespace: otel-ingest
+spec:
+  interval: 1h
+  releaseName: otel-ingest
+  chart:
+    spec:
+      chart: opentelemetry-collector
+      version: "0.173.1"
+      sourceRef:
+        kind: HelmRepository
+        name: open-telemetry
+        namespace: flux-system
+  values:
+    mode: deployment
+    fullnameOverride: otel-ingest
+    image:
+      repository: otel/opentelemetry-collector-contrib
+    ports:
+      jaeger-compact:
+        enabled: false
+      jaeger-thrift:
+        enabled: false
+      jaeger-grpc:
+        enabled: false
+      zipkin:
+        enabled: false
+    extraEnvs:
+      - name: INGEST_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: otel-ingest-token
+            key: token
+    resources:
+      requests: {cpu: 50m, memory: 128Mi}
+      limits: {cpu: 500m, memory: 512Mi}
+    config:
+      extensions:
+        bearertokenauth/ingest:
+          scheme: Bearer
+          token: ${env:INGEST_TOKEN}
+      receivers:
+        jaeger: null
+        zipkin: null
+        prometheus: null
+        otlp:
+          protocols:
+            grpc:
+              endpoint: ${env:MY_POD_IP}:4317
+              auth:
+                authenticator: bearertokenauth/ingest
+            http:
+              endpoint: ${env:MY_POD_IP}:4318
+              auth:
+                authenticator: bearertokenauth/ingest
+      processors:
+        resource/phoenix-project:
+          attributes:
+            - key: openinference.project.name
+              value: home-agent
+              action: insert
+        transform/truncate:
+          error_mode: ignore
+          trace_statements:
+            - truncate_all(span.attributes, 4096)
+          log_statements:
+            - truncate_all(log.attributes, 4096)
+      exporters:
+        otlp_grpc/phoenix:
+          endpoint: phoenix-svc.phoenix.svc.cluster.local:4317
+          tls:
+            insecure: true
+        otlp_http/mlflow:
+          endpoint: http://mlflow-mlflow.mlflow.svc.cluster.local:5000
+          headers:
+            x-mlflow-experiment-id: "4"
+        opensearch:
+          http:
+            endpoint: http://opensearch.otel-demo.svc.cluster.local:9200
+          logs_index: otel-logs-external
+          logs_index_time_format: yyyy-MM-dd
+          # Unlike the otel-demo chart's opensearch exporter: queue, so an
+          # OpenSearch outage doesn't turn into 500s back to the sender
+          # (lab note O14).
+          sending_queue:
+            enabled: true
+      service:
+        extensions:
+          - health_check
+          - bearertokenauth/ingest
+        pipelines:
+          traces:
+            receivers: [otlp]
+            processors: [memory_limiter, resource/phoenix-project, transform/truncate, batch]
+            exporters: [otlp_grpc/phoenix, otlp_http/mlflow]
+          logs:
+            receivers: [otlp]
+            processors: [memory_limiter, transform/truncate, batch]
+            exporters: [opensearch]
+          metrics: null
