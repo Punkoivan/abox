@@ -79,6 +79,11 @@ spec:
   values:
     components:
       load-generator:
+        # Off: the cluster's traffic is now a real agent (velesha, via
+        # otel-ingest), and the synthetic k6 load -- a headless Chromium
+        # VU included -- was the largest steady CPU consumer after MLflow.
+        # Flip back to true to bring it (and the dashboard below) back.
+        enabled: false
         envOverrides:
           - name: K6_WEB_DASHBOARD
             value: "true"
@@ -88,15 +93,21 @@ spec:
             value: "5665"
         service:
           port: 5665
-    # Bundled jaeger/prometheus/grafana backends disabled (opensearch is
+    # Bundled prometheus/grafana backends disabled (jaeger and opensearch are
     # re-enabled below) --
     # frees ~1.7Gi mem + 1+ CPU on a constrained KinD node: jaeger alone
     # requested 600Mi, prometheus 768Mi, opensearch 1 CPU/100Mi, grafana
     # 150m/256Mi. Traces additionally consolidate into mlflow
     # (releases/mlflow.yaml) via the bridge collector
     # (releases/mlflow-otel-collector.yaml), same as triage-core.
+    # Jaeger back on as the "plain OTel" trace backend to compare against
+    # MLflow and Phoenix (course lab: three o11y solutions from a GenAI point
+    # of view). Chart default: Jaeger v2, in-memory storage, 25k traces,
+    # 600Mi -- traces don't survive a pod restart. otel-ingest fans out to it
+    # too (releases/otel-ingest.yaml). UI:
+    #   kubectl -n otel-demo port-forward svc/jaeger 16686:16686
     jaeger:
-      enabled: false
+      enabled: true
     prometheus:
       enabled: false
     grafana:
