@@ -1,0 +1,102 @@
+# agentevals-go (github.com/triageagent-dev/evals): scores agent behaviour from
+# OTel traces -- tool trajectory, ROUGE response match, LLM-as-judge metrics --
+# without re-running the agent. Course lab 8.
+#
+# Traffic in: releases/otel-ingest.yaml fans external agents' traces (velesha)
+# out to this OTLP/HTTP receiver as well, so sessions show up here live next
+# to Phoenix/MLflow/Jaeger. The receivers are unauthenticated by design
+# ("never gated"), which is why they stay ClusterIP-only behind otel-ingest.
+#
+# Image: multi-arch rebuild from a pinned commit (the project publishes none),
+# .github/workflows/external-images.yaml's agentevals-go job.
+#
+# Auth: none. GitHub OAuth only turns on when both --github-client-id and a
+# secret are set; neither is. UI and REST are ClusterIP-only:
+#   kubectl -n agentevals port-forward svc/agentevals 8001:8001
+#   open http://localhost:8001
+#
+# Judge metrics (final_response_match_v2, hallucinations_v1, rubric_based_*)
+# talk the Gemini API only; there is no Gemini key here, so they are not wired
+# yet. Local metrics (tool_trajectory_avg_score, response_match_score) work.
+#
+# Run history / sessions / saved eval sets persist in SQLite on the claim.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: agentevals
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: agentevals-data
+  namespace: agentevals
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agentevals
+  namespace: agentevals
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate   # RWO claim + a single SQLite writer
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agentevals
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agentevals
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        fsGroup: 65532
+      containers:
+        - name: agentevals
+          image: ghcr.io/punkoivan/abox/agentevals-go:0.0.0-54107cf
+          args:
+            - serve
+            - --addr=:8001
+            - --otlp-addr=:4318
+            - --otlp-grpc-addr=:4317
+            - --health-addr=:9090
+            - --session-db=/data/sessions.db
+          ports:
+            - {name: http, containerPort: 8001}
+            - {name: otlp-http, containerPort: 4318}
+            - {name: otlp-grpc, containerPort: 4317}
+            - {name: health, containerPort: 9090}
+          volumeMounts:
+            - {name: data, mountPath: /data}
+          readinessProbe:
+            httpGet: {path: /api/health, port: health}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /api/health, port: health}
+            periodSeconds: 30
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: agentevals-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agentevals
+  namespace: agentevals
+spec:
+  selector:
+    app.kubernetes.io/name: agentevals
+  ports:
+    - {name: http, port: 8001, targetPort: http}
+    - {name: otlp-http, port: 4318, targetPort: otlp-http}
+    - {name: otlp-grpc, port: 4317, targetPort: otlp-grpc}

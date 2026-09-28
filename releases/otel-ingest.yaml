@@ -7,6 +7,7 @@
 #   traces -> Phoenix, project "velesha" (openinference.project.name,
 #             inserted only if the sender didn't set its own)
 #          -> Jaeger (the otel-demo one) -- plain OTel, for comparison
+#          -> agentevals (releases/agentevals.yaml) -- live sessions to score
 #          -> MLflow, experiment "velesha" (id 4, created by
 #             releases/mlflow-experiments.yaml; MLflow only takes OTLP/HTTP)
 #   logs   -> OpenSearch (the otel-demo one), index otel-logs-external-*
@@ -108,6 +109,8 @@ spec:
           endpoint: jaeger.otel-demo.svc.cluster.local:4317
           tls:
             insecure: true
+        otlp_http/agentevals:
+          endpoint: http://agentevals.agentevals.svc.cluster.local:4318
         otlp_http/mlflow:
           endpoint: http://mlflow-mlflow.mlflow.svc.cluster.local:5000
           headers:
@@ -130,7 +133,7 @@ spec:
           traces:
             receivers: [otlp]
             processors: [memory_limiter, resource/phoenix-project, transform/truncate, batch]
-            exporters: [otlp_grpc/phoenix, otlp_grpc/jaeger, otlp_http/mlflow]
+            exporters: [otlp_grpc/phoenix, otlp_grpc/jaeger, otlp_http/mlflow, otlp_http/agentevals]
           logs:
             receivers: [otlp]
             processors: [memory_limiter, transform/truncate, batch]

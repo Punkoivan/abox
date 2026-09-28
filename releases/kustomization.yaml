@@ -4,6 +4,7 @@ kind: Kustomization
 resources:
   - secrets
   - agentgateway.yaml
+  - agentevals.yaml
   - agentgateway-llm.yaml
   - agentregistry.yaml
   - agent-retrieval.yaml

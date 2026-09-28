@@ -8,6 +8,11 @@
 #                           swapped for buildx's TARGETARCH before building.
 #   agentregistry-inventory ghcr.io/den-vasyliev/agentregistry-inventory
 #                           -- built with ko, which cross-compiles natively.
+#   agentevals-go           github.com/triageagent-dev/evals -- no published
+#                           image at all (its CI builds without pushing). No
+#                           tags yet, so pinned to a commit. The UI (node) and
+#                           Go stages are switched to BUILDPLATFORM + GOARCH,
+#                           so neither npm ci nor go build runs under QEMU.
 #
 # Not tied to release tags: these follow the upstream tags pinned in
 # releases/. Runs when this file changes (bump the versions below together
@@ -31,6 +36,8 @@ on:
 env:
   EPP_VERSION: ${{ inputs.epp_version || 'v1.5.0' }}
   AGENTREGISTRY_VERSION: ${{ inputs.agentregistry_version || 'v0.5.18' }}
+  AGENTEVALS_REF: 54107cfe6171886072538aaa71797b298060193e
+  AGENTEVALS_TAG: 0.0.0-54107cf
 
 jobs:
   epp:
@@ -101,3 +108,39 @@ jobs:
           ko build ./cmd/controller --bare --sbom=none \
             --platform=linux/amd64,linux/arm64 \
             --tags="${VERSION#v}"
+
+  agentevals-go:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Lowercase image path
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}/agentevals-go" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+        with:
+          repository: triageagent-dev/evals
+          ref: ${{ env.AGENTEVALS_REF }}
+      - name: Build natively, cross-compile Go
+        run: |
+          grep -q '^FROM node:22-bookworm-slim AS ui$' Dockerfile
+          grep -q '^FROM golang:1.25-bookworm AS build$' Dockerfile
+          grep -q '^RUN CGO_ENABLED=0 go build ' Dockerfile
+          sed -i \
+            -e 's|^FROM node:22-bookworm-slim AS ui$|FROM --platform=$BUILDPLATFORM node:22-bookworm-slim AS ui|' \
+            -e 's|^FROM golang:1.25-bookworm AS build$|FROM --platform=$BUILDPLATFORM golang:1.25-bookworm AS build\nARG TARGETARCH|' \
+            -e 's|^RUN CGO_ENABLED=0 go build |RUN CGO_ENABLED=0 GOARCH=$TARGETARCH go build |' \
+            Dockerfile
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.IMAGE }}:${{ env.AGENTEVALS_TAG }}
