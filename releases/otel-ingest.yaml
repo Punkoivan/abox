@@ -20,9 +20,18 @@
 #   kubectl -n otel-ingest port-forward --address 0.0.0.0 svc/otel-ingest 4318:4318 4317:4317
 # then OTLP/HTTP at http://<that-machine's-LAN-IP>:4318 (gRPC :4317).
 #
-# Redaction: gen_ai/tool payload attributes are truncated to 4KB here, the
-# one place every external span passes through (lab note O11: full tool
-# output lands in traces verbatim).
+# Truncation, two pipelines off the same receiver:
+#   traces/eval -> agentevals, untruncated: an evaluator has to see what the
+#                  model saw. ADK's gcp.vertex.agent.llm_request is the JSON
+#                  agentevals extracts the user turn from; cut, it can't be
+#                  parsed and there is nothing to score.
+#   traces      -> Phoenix / Jaeger / MLflow (what people read): every
+#                  attribute capped at 4096 bytes (lab note O11: full tool
+#                  output lands in traces verbatim), except llm_request /
+#                  llm_response, kept whole up to 64KiB so they stay valid
+#                  JSON. truncate_all counts BYTES: velesha's Ukrainian system
+#                  prompt (2 bytes/char) hit the cap at ~2k characters, and
+#                  every llm_request arrived as 4095 bytes of broken JSON.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -97,7 +106,11 @@ spec:
         transform/truncate:
           error_mode: ignore
           trace_statements:
+            - set(span.cache["llm_request"], span.attributes["gcp.vertex.agent.llm_request"])
+            - set(span.cache["llm_response"], span.attributes["gcp.vertex.agent.llm_response"])
             - truncate_all(span.attributes, 4096)
+            - set(span.attributes["gcp.vertex.agent.llm_request"], span.cache["llm_request"]) where span.cache["llm_request"] != nil and Len(span.cache["llm_request"]) <= 65536
+            - set(span.attributes["gcp.vertex.agent.llm_response"], span.cache["llm_response"]) where span.cache["llm_response"] != nil and Len(span.cache["llm_response"]) <= 65536
           log_statements:
             - truncate_all(log.attributes, 4096)
       exporters:
@@ -133,7 +146,11 @@ spec:
           traces:
             receivers: [otlp]
             processors: [memory_limiter, resource/phoenix-project, transform/truncate, batch]
-            exporters: [otlp_grpc/phoenix, otlp_grpc/jaeger, otlp_http/mlflow, otlp_http/agentevals]
+            exporters: [otlp_grpc/phoenix, otlp_grpc/jaeger, otlp_http/mlflow]
+          traces/eval:
+            receivers: [otlp]
+            processors: [memory_limiter, resource/phoenix-project, batch]
+            exporters: [otlp_http/agentevals]
           logs:
             receivers: [otlp]
             processors: [memory_limiter, transform/truncate, batch]
