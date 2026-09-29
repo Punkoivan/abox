@@ -103,6 +103,16 @@ spec:
             - key: openinference.project.name
               value: velesha
               action: insert
+        # agentevals' ADK converter finds a turn by a span named invoke_agent*
+        # with ADK descendants. openinference-instrumentation-google-adk (added
+        # to velesha for Phoenix) replaces ADK's own tracer and names that span
+        # "agent_run [<agent>]" instead, so agentevals found no turns at all.
+        # Renamed only on the way to agentevals; Phoenix keeps OpenInference's
+        # names. ($$ escapes the collector's own ${} expansion.)
+        transform/adk-names:
+          error_mode: ignore
+          trace_statements:
+            - replace_pattern(span.name, "^agent_run \\[(.+)\\]$", "invoke_agent $$1")
         transform/truncate:
           error_mode: ignore
           trace_statements:
@@ -152,7 +162,7 @@ spec:
             exporters: [otlp_grpc/phoenix, otlp_grpc/jaeger, otlp_http/mlflow]
           traces/eval:
             receivers: [otlp]
-            processors: [memory_limiter, resource/phoenix-project, batch]
+            processors: [memory_limiter, resource/phoenix-project, transform/adk-names, batch]
             exporters: [otlp_http/agentevals]
           logs:
             receivers: [otlp]
