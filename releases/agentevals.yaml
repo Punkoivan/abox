@@ -8,7 +8,9 @@
 # ("never gated"), which is why they stay ClusterIP-only behind otel-ingest.
 #
 # Image: multi-arch rebuild from a pinned commit (the project publishes none),
-# .github/workflows/external-images.yaml's agentevals-go job.
+# .github/workflows/external-images.yaml's agentevals-go job -- currently the
+# Punkoivan/evals feat/otlp-gzip fix, which lets the OTLP/HTTP receiver take
+# the gzip bodies a stock collector sends.
 #
 # Auth: none. GitHub OAuth only turns on when both --github-client-id and a
 # secret are set; neither is. UI and REST are ClusterIP-only:
@@ -59,7 +61,7 @@ spec:
         fsGroup: 65532
       containers:
         - name: agentevals
-          image: ghcr.io/punkoivan/abox/agentevals-go:0.0.0-54107cf
+          image: ghcr.io/punkoivan/abox/agentevals-go:0.0.0-b31c2d1
           args:
             - serve
             - --addr=:8001
