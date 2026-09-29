@@ -10,7 +10,10 @@
 #                           -- built with ko, which cross-compiles natively.
 #   agentevals-go           github.com/triageagent-dev/evals -- no published
 #                           image at all (its CI builds without pushing). No
-#                           tags yet, so pinned to a commit. The UI (node) and
+#                           tags yet, so pinned to a commit -- currently on the
+#                           Punkoivan/evals fork's feat/otlp-gzip (gzip
+#                           Content-Encoding on the OTLP/HTTP receiver, not
+#                           upstream yet). The UI (node) and
 #                           Go stages are switched to BUILDPLATFORM + GOARCH,
 #                           so neither npm ci nor go build runs under QEMU.
 #
@@ -36,8 +39,9 @@ on:
 env:
   EPP_VERSION: ${{ inputs.epp_version || 'v1.5.0' }}
   AGENTREGISTRY_VERSION: ${{ inputs.agentregistry_version || 'v0.5.18' }}
-  AGENTEVALS_REF: 54107cfe6171886072538aaa71797b298060193e
-  AGENTEVALS_TAG: 0.0.0-54107cf
+  AGENTEVALS_REPO: Punkoivan/evals
+  AGENTEVALS_REF: b31c2d12199714f2c3945935e4c8a6e097922471
+  AGENTEVALS_TAG: 0.0.0-b31c2d1
 
 jobs:
   epp:
@@ -119,7 +123,7 @@ jobs:
         run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}/agentevals-go" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
         with:
-          repository: triageagent-dev/evals
+          repository: ${{ env.AGENTEVALS_REPO }}
           ref: ${{ env.AGENTEVALS_REF }}
       - name: Build natively, cross-compile Go
         run: |
