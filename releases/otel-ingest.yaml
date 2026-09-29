@@ -124,6 +124,11 @@ spec:
             insecure: true
         otlp_http/agentevals:
           endpoint: http://agentevals.agentevals.svc.cluster.local:4318
+          # agentevals-go's /v1/traces handler doesn't decode
+          # Content-Encoding: gzip (the exporter's default) -- every export got
+          # HTTP 400 and was dropped as a permanent error. In-cluster hop, so
+          # nothing is lost by not compressing.
+          compression: none
         otlp_http/mlflow:
           endpoint: http://mlflow-mlflow.mlflow.svc.cluster.local:5000
           headers:
